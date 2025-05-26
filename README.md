@@ -1,7 +1,6 @@
-<<<<<<< HEAD
 # LLM AOT Process
 
-This project is designed for **Ahead-of-Thought (AoT) processing with Large Language Models (LLMs)**. It provides a flexible framework to orchestrate complex reasoning tasks by breaking them down into iterative steps, managing LLM interactions, and dynamically adapting based on problem complexity and resource constraints.
+This project is designed for **Answer-then-Think (AoT) processing with Large Language Models (LLMs)**. It provides a flexible framework to orchestrate complex reasoning tasks by breaking them down into iterative steps, managing LLM interactions, and dynamically adapting based on problem complexity and resource constraints.
 
 ## Key Features & Flows
 
