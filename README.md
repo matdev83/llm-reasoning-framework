@@ -2,6 +2,8 @@
 
 This project is designed for **Answer-then-Think (AoT) processing with Large Language Models (LLMs)**. It provides a flexible framework to orchestrate complex reasoning tasks by breaking them down into iterative steps, managing LLM interactions, and dynamically adapting based on problem complexity and resource constraints.
 
+AoT (Answer-then-Think) is a prompting strategy that reduces hallucinations in LLMs by first providing an answer and then explaining the reasoning. This approach is useful for complex problems and can reveal the model's initial instincts versus its rationalizations. For more details, see [Order Matters in Hallucination](https://arxiv.org/html/2408.05093v1) paper by Zikai Xie.
+
 ## Key Features & Flows
 
 The core of this project revolves around the `InteractiveAoTOrchestrator`, which manages the overall problem-solving flow based on a chosen trigger mode:
@@ -30,6 +32,10 @@ When the AoT process is triggered, the `AoTProcessor` takes over. It iteratively
     *   **Max Time**: Stops if the overall wall-clock time for the process exceeds a limit.
     *   **No Progress Limit**: Terminates if the LLM repeatedly provides the same "current answer" for a set number of steps, indicating a potential loop or lack of progress.
 5.  If a final answer is not found within the iterative steps, an explicit final call to the LLM is made to synthesize the solution from the accumulated reasoning trace.
+
+## Dependencies
+
+This project uses [llm-accounting](https://github.com/matdev83/llm-accounting) - a Python package for tracking and analyzing LLM usage across different models and applications. It is primarily designed as a library for integration into development process of LLM-based agentic workflow tooling, providing robust tracking capabilities.
 
 ## Installation
 
