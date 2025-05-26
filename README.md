@@ -33,10 +33,6 @@ When the AoT process is triggered, the `AoTProcessor` takes over. It iteratively
     *   **No Progress Limit**: Terminates if the LLM repeatedly provides the same "current answer" for a set number of steps, indicating a potential loop or lack of progress.
 5.  If a final answer is not found within the iterative steps, an explicit final call to the LLM is made to synthesize the solution from the accumulated reasoning trace.
 
-## Dependencies
-
-This project uses [llm-accounting](https://github.com/matdev83/llm-accounting) - a Python package for tracking and analyzing LLM usage across different models and applications. It is primarily designed as a library for integration into development process of LLM-based agentic workflow tooling, providing robust tracking capabilities.
-
 ## Installation
 
 You can install this package using pip:
@@ -139,7 +135,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## LLM Call Auditing
 
-All outgoing calls to Large Language Models (LLMs) made by this project are meticulously tracked using the `llm-accounting` library. This integration provides a comprehensive audit trail of LLM interactions.
+All outgoing calls to Large Language Models (LLMs) made by this project are meticulously tracked using the [llm-accounting](https://github.com/matdev83/llm-accounting) library. This integration provides a comprehensive audit trail of LLM interactions.
 
 The audit data, which includes details such as the model used, prompt content, token counts (prompt and completion), call duration, and any associated costs (calculated by `llm-accounting`), is stored in an SQLite database. By default, this database is named `llm_accounting.db` and is created in the root directory of the project when the first LLM call is made.
 
