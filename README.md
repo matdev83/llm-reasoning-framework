@@ -143,4 +143,3 @@ This auditing feature is invaluable for:
 *   **Debugging**: Reviewing the exact requests and responses when troubleshooting issues.
 *   **Monitoring LLM Usage**: Understanding which models are used, how often, and with what performance characteristics.
 *   **Performance Analysis**: Analyzing token usage and call durations to optimize prompts and model selections.
->>>>>>> llm-accounting-integration
