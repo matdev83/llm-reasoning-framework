@@ -1,0 +1,20 @@
+You have discovered a complex alien artifact composed of several distinct components. Your goal is to assemble and activate it. You have the following components:
+Aurelian Core (AC): A pulsating, crystalline sphere.
+Krellian Casing (KC): A two-part metallic shell (KC-Top, KC-Bottom) that fits around the Aurelian Core.
+Zylonic Conduits (ZC): A set of three flexible, glowing tubes (ZC1, ZC2, ZC3).
+Phason Emitter (PE): A small, pyramid-shaped device with a single input port.
+Glyphic Resonator (GR): A flat, circular disk with three output sockets.
+Activation Crystal (AX): A small, inert crystal.
+Assembly & Activation Rules:
+The Aurelian Core (AC) must be energized before any other assembly. To energize it, it must be exposed to a specific sequence of three energy pulses: Blue, then Red, then Green (BRG sequence). You have a pulse generator capable of emitting these.
+Once the Aurelian Core (AC) is energized, the Krellian Casing (KC-Bottom) must be placed on a stable, non-metallic surface.
+The energized Aurelian Core (AC) is then placed into the KC-Bottom.
+The Glyphic Resonator (GR) must be attached to the top of the energized Aurelian Core (AC) before the KC-Top is attached. The GR has a specific orientation marked by a small notch that must align with a marking on the AC.
+The Krellian Casing (KC-Top) can then be attached to KC-Bottom, enclosing the AC and GR. It will only seal correctly if the GR is properly aligned.
+Each of the three Zylonic Conduits (ZC1, ZC2, ZC3) must be connected from one of the three output sockets on the Glyphic Resonator (GR) to three distinct input ports on the inner surface of the Krellian Casing (KC). These ports are only accessible after the KC-Top is sealed and become visible through small apertures. This step requires careful manipulation.
+The Phason Emitter (PE) must be connected to the Glyphic Resonator (GR). The GR has one central output socket that becomes accessible after the Zylonic Conduits are connected. The PE connects to this central socket.
+The Phason Emitter (PE) must be calibrated after it is connected. Calibration requires a diagnostic pulse (Yellow) from your pulse generator, aimed at the PE. A successful calibration is indicated by the PE glowing faintly.
+The Activation Crystal (AX) can only be inserted into a slot on the Phason Emitter (PE) after the PE has been successfully calibrated.
+The artifact activates automatically once the Activation Crystal (AX) is correctly inserted, provided all previous steps were performed correctly and all components are in their designated states (e.g., AC energized, PE calibrated).
+Your Task:
+Provide the precise, ordered sequence of actions required to assemble and activate the alien artifact. Each step in your reasoning should clearly state the action taken and update the current state of the assembly (e.g., "Step X: Energize Aurelian Core (AC) with BRG pulse sequence. (Current state: AC energized, other components unchanged)"). The final step should be the activation of the artifact.

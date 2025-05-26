@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-aot-process"
+version = "0.1.0"
+description = "A project for LLM AOT processing"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {file = "LICENSE"}
+keywords = ["llm", "aot", "process"]
+authors = [
+  {name = "Mateusz", email = "matdev83@github.com"},
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "openai",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/matdev83/llm-aot-process"
+"Bug Tracker" = "https://github.com/matdev83/llm-aot-process/issues"

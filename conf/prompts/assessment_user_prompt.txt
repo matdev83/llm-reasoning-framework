@@ -1,0 +1,2 @@
+User Request: "{user_problem_text_placeholder}"
+Analyze the request above. Based SOLELY on its apparent complexity and the likely need for intermediate reasoning steps, calculations, or decomposition, output ONLY "ONESHOT" or "AOT".

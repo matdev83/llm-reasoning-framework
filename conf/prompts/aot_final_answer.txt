@@ -1,0 +1,6 @@
+You have finished all reasoning steps for the following problem:
+Problem: {problem_placeholder}
+So far:
+{so_far_placeholder}
+Now output only the final answer in the format:
+Final answer: <value>

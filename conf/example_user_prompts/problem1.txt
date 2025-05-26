@@ -1,0 +1,8 @@
+There are three lockers:
+
+One contains only keys.
+
+One contains only coins.
+
+One contains both keys and coins.
+All lockers are mislabeled. You can open one locker and take out one item. How do you deduce the correct contents of all lockers?
