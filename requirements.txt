@@ -1,2 +1,5 @@
 # Add your project dependencies here
 openai
+llm-accounting
+requests
+sqlalchemy
