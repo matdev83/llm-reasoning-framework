@@ -2,7 +2,7 @@ import time
 import requests
 import logging
 from typing import List, Optional, Tuple
-from llm_accounting import Accounting
+from llm_accounting import LLMAccounting
 
 from src.aot_dataclasses import LLMCallStats
 from src.aot_constants import OPENROUTER_API_URL, HTTP_REFERER, APP_TITLE
@@ -19,7 +19,7 @@ class LLMClient:
             "X-Title": app_title,
             "Content-Type": "application/json"
         }
-        self.accounting = Accounting()
+        self.accounting = LLMAccounting()
 
     def call(self, prompt: str, models: List[str], temperature: float) -> Tuple[str, LLMCallStats]:
         if not models:
@@ -42,14 +42,13 @@ class LLMClient:
             
             try:
                 # Log the request before making the API call
-                request_id = self.accounting.log_request(
-                    model_name=model_name,
-                    prompt=prompt, # User content
-                    request_payload=payload,
-                    provider="openrouter",
-                    call_type="chat_completion"
+                self.accounting.track_usage(
+                    model=model_name,
+                    prompt_tokens=len(prompt.split()),  # Approximate token count
+                    caller_name="LLMClient",
+                    username="api_user"
                 )
-                logging.info(f"Attempting LLM call with model: {model_name}, request_id: {request_id}")
+                logging.info(f"Attempting LLM call with model: {model_name}")
 
                 response = requests.post(self.api_url, headers=self.http_headers, json=payload, timeout=90)
                 current_call_stats.call_duration_seconds = time.monotonic() - call_start_time
@@ -63,28 +62,28 @@ class LLMClient:
 
                 if 400 <= response.status_code < 600:
                     error_body_text = response.text
-                    if response_payload and 'error' in response_payload: # Use parsed error if available
-                         error_body_text = response_payload.get('error', {}).get('message', str(response_payload.get('error', error_body_text)))
+                    if response_payload is not None:
+                        response_dict = response_payload  # Type checker now knows this is not None
+                        if 'error' in response_dict:
+                            error_body_text = str(response_dict.get('error', {}).get('message', error_body_text))
                     
                     logging.warning(f"API call to {model_name} failed with HTTP status {response.status_code}: {error_body_text}. Trying next model if available.")
                     last_error_content_for_failover = f"Error: API call to {model_name} (HTTP {response.status_code}) - {error_body_text}"
                     
                     # Try to get usage even from error responses
-                    if response_payload:
-                        usage = response_payload.get("usage", {})
+                    if response_payload is not None:
+                        usage = response_payload.get("usage", {})  # Now safe due to None check
                         current_call_stats.completion_tokens = usage.get("completion_tokens", 0)
                         current_call_stats.prompt_tokens = usage.get("prompt_tokens", 0)
                     
-                    if request_id:
-                        self.accounting.log_response(
-                            request_id=request_id,
-                            model_name=model_name,
-                            response_payload=response_payload if response_payload else {"error": error_body_text, "status_code": response.status_code},
-                            prompt_tokens=current_call_stats.prompt_tokens,
-                            completion_tokens=current_call_stats.completion_tokens,
-                            cost=0, # llm-accounting can calculate
-                            call_duration_seconds=current_call_stats.call_duration_seconds
-                        )
+                    self.accounting.track_usage(
+                        model=model_name,
+                        prompt_tokens=current_call_stats.prompt_tokens,
+                        completion_tokens=current_call_stats.completion_tokens,
+                        execution_time=current_call_stats.call_duration_seconds,
+                        caller_name="LLMClient",
+                        username="api_user"
+                    )
                     last_error_stats_for_failover = current_call_stats
                     continue 
 
@@ -92,30 +91,32 @@ class LLMClient:
                 
                 data = response_payload # Already parsed
 
-                if "error" in data: 
-                    error_msg = data['error'].get('message', str(data['error']))
-                    logging.error(f"LLM API Error ({model_name}) in 2xx response: {error_msg}")
-                    content = f"Error: API returned an error - {error_msg}"
-                elif not data.get("choices") or not data["choices"][0].get("message"):
-                    logging.error(f"Unexpected API response structure from {model_name}: {data}")
-                    content = "Error: Unexpected API response structure"
+                if data is not None:
+                    if "error" in data: 
+                        error_msg = data['error'].get('message', str(data['error']))
+                        logging.error(f"LLM API Error ({model_name}) in 2xx response: {error_msg}")
+                        content = f"Error: API returned an error - {error_msg}"
+                    elif not data.get("choices") or not data["choices"][0].get("message"):
+                        logging.error(f"Unexpected API response structure from {model_name}: {data}")
+                        content = "Error: Unexpected API response structure"
+                    else:
+                        content = data["choices"][0]["message"]["content"]
+                    
+                    usage = data.get("usage", {})
                 else:
-                    content = data["choices"][0]["message"]["content"]
-                
-                usage = data.get("usage", {})
+                    content = "Error: No valid response data received"
+                    usage = {}
                 current_call_stats.completion_tokens = usage.get("completion_tokens", 0)
                 current_call_stats.prompt_tokens = usage.get("prompt_tokens", 0)
 
-                if request_id:
-                    self.accounting.log_response(
-                        request_id=request_id,
-                        model_name=model_name,
-                        response_payload=data,
-                        prompt_tokens=current_call_stats.prompt_tokens,
-                        completion_tokens=current_call_stats.completion_tokens,
-                        cost=0, 
-                        call_duration_seconds=current_call_stats.call_duration_seconds
-                    )
+                self.accounting.track_usage(
+                    model=model_name,
+                    prompt_tokens=current_call_stats.prompt_tokens,
+                    completion_tokens=current_call_stats.completion_tokens,
+                    execution_time=current_call_stats.call_duration_seconds,
+                    caller_name="LLMClient",
+                    username="api_user"
+                )
 
                 if content.startswith("Error:"): 
                     if model_name != models[-1]: 
@@ -143,15 +144,13 @@ class LLMClient:
                 else:
                     response_data_for_log = {"error": str(e)}
 
-                if request_id:
-                    self.accounting.log_response(
-                        request_id=request_id,
-                        model_name=model_name,
-                        response_payload=response_data_for_log,
+                    self.accounting.track_usage(
+                        model=model_name,
                         prompt_tokens=current_call_stats.prompt_tokens,
                         completion_tokens=current_call_stats.completion_tokens,
-                        cost=0,
-                        call_duration_seconds=current_call_stats.call_duration_seconds
+                        execution_time=current_call_stats.call_duration_seconds,
+                        caller_name="LLMClient",
+                        username="api_user"
                     )
                 
                 if e.response is not None and (400 <= e.response.status_code < 500 and e.response.status_code not in [401, 403, 429]):
@@ -165,16 +164,12 @@ class LLMClient:
 
             except requests.exceptions.Timeout as e:
                 current_call_stats.call_duration_seconds = time.monotonic() - call_start_time
-                if request_id:
-                    self.accounting.log_response(
-                        request_id=request_id,
-                        model_name=model_name,
-                        response_payload={"error": "Timeout", "details": str(e)},
-                        prompt_tokens=0, # Unknown
-                        completion_tokens=0, # Unknown
-                        cost=0,
-                        call_duration_seconds=current_call_stats.call_duration_seconds
-                    )
+                self.accounting.track_usage(
+                    model=model_name,
+                    execution_time=current_call_stats.call_duration_seconds,
+                    caller_name="LLMClient",
+                    username="api_user"
+                )
                 logging.warning(f"API request to {model_name} timed out after {current_call_stats.call_duration_seconds:.2f}s. Trying next model if available.")
                 last_error_content_for_failover = f"Error: API call to {model_name} timed out"
                 last_error_stats_for_failover = current_call_stats
@@ -182,16 +177,12 @@ class LLMClient:
 
             except requests.exceptions.RequestException as e: 
                 current_call_stats.call_duration_seconds = time.monotonic() - call_start_time
-                if request_id:
-                    self.accounting.log_response(
-                        request_id=request_id,
-                        model_name=model_name,
-                        response_payload={"error": "RequestException", "details": str(e)},
-                        prompt_tokens=0, # Unknown
-                        completion_tokens=0, # Unknown
-                        cost=0,
-                        call_duration_seconds=current_call_stats.call_duration_seconds
-                    )
+                self.accounting.track_usage(
+                    model=model_name,
+                    execution_time=current_call_stats.call_duration_seconds,
+                    caller_name="LLMClient",
+                    username="api_user"
+                )
                 logging.warning(f"API request to {model_name} failed with RequestException: {e}. Trying next model if available.")
                 last_error_content_for_failover = f"Error: API call to {model_name} failed - {e}"
                 last_error_stats_for_failover = current_call_stats
