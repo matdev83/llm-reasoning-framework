@@ -12,7 +12,7 @@ The core of this project revolves around the `InteractiveAoTOrchestrator`, which
 
 ### Local Heuristic Analysis
 
-When `ASSESS_FIRST` mode is active, a local, deterministic heuristic function (`should_use_aot_heuristically` in `complexity_assessor.py`) is used by default to quickly identify problems that are *highly likely* to require an AoT process. If this heuristic triggers, the system immediately proceeds with AoT without making an LLM call for assessment, saving time and tokens.
+When `ASSESS_FIRST` mode is active, a local, deterministic heuristic function (`should_use_aot_heuristically` in `complexity_assessor.py`) is used by default to quickly identify problems that are *highly likely* to require an AoT process. If this heuristic triggers, the system immediately proceeds with AoT withoutmaking an LLM call for assessment, saving time and tokens.
 
 This heuristic checks for specific keywords and patterns in the problem prompt that strongly indicate a need for detailed, multi-step reasoning (e.g., "design architecture for", "explain in great detail", "step-by-step", "prove that").
 
@@ -93,6 +93,18 @@ Here are the available command-line arguments:
     *   Choices: `0` to `100`
     *   Default: `None`
 *   **`--disable-heuristic`**: Flag to disable the local heuristic analysis for complexity assessment. When present, the assessment LLM will always be used.
+
+## LLM Call Auditing
+
+All outgoing calls to Large Language Models (LLMs) made by this project are meticulously tracked using the `llm-accounting` library. This integration provides a comprehensive audit trail of LLM interactions.
+
+The audit data, which includes details such as the model used, prompt content, token counts (prompt and completion), call duration, and any associated costs (calculated by `llm-accounting`), is stored in an SQLite database. By default, this database is named `llm_accounting.db` and is created in the root directory of the project when the first LLM call is made.
+
+This auditing feature is invaluable for:
+*   **Cost Tracking**: Monitoring expenditure related to LLM API usage.
+*   **Debugging**: Reviewing the exact requests and responses when troubleshooting issues.
+*   **Monitoring LLM Usage**: Understanding which models are used, how often, and with what performance characteristics.
+*   **Performance Analysis**: Analyzing token usage and call durations to optimize prompts and model selections.
 
 ### Configuration Files
 

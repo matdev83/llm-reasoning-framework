@@ -7,5 +7,6 @@ setup(
     package_dir={"": "src"},
     install_requires=[
         "openai",
+        "llm-accounting",
     ],
 )
