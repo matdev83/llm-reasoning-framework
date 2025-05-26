@@ -138,9 +138,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 All outgoing calls to Large Language Models (LLMs) made by this project are meticulously tracked using the [llm-accounting](https://github.com/matdev83/llm-accounting) library. This integration provides a comprehensive audit trail of LLM interactions.
 
 The audit data, which includes details such as the model used, prompt content, token counts (prompt and completion), call duration, and any associated costs (calculated by `llm-accounting`), is stored in an SQLite database. By default, this database is named `accounting.sqlite` and is created in the data/ directory of the project when the first LLM call is made.
-
-This auditing feature is invaluable for:
-*   **Cost Tracking**: Monitoring expenditure related to LLM API usage.
-*   **Debugging**: Reviewing the exact requests and responses when troubleshooting issues.
-*   **Monitoring LLM Usage**: Understanding which models are used, how often, and with what performance characteristics.
-*   **Performance Analysis**: Analyzing token usage and call durations to optimize prompts and model selections.
