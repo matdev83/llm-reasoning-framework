@@ -1,7 +1,7 @@
 <<<<<<< HEAD
 # LLM AOT Process
 
-This project is designed for **Answer-then-Think (AoT) processing with Large Language Models (LLMs)**. It provides a flexible framework to orchestrate complex reasoning tasks by breaking them down into iterative steps, managing LLM interactions, and dynamically adapting based on problem complexity and resource constraints.
+This project is designed for **Ahead-of-Thought (AoT) processing with Large Language Models (LLMs)**. It provides a flexible framework to orchestrate complex reasoning tasks by breaking them down into iterative steps, managing LLM interactions, and dynamically adapting based on problem complexity and resource constraints.
 
 ## Key Features & Flows
 
@@ -131,4 +131,16 @@ To set up a development environment:
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## LLM Call Auditing
+
+All outgoing calls to Large Language Models (LLMs) made by this project are meticulously tracked using the `llm-accounting` library. This integration provides a comprehensive audit trail of LLM interactions.
+
+The audit data, which includes details such as the model used, prompt content, token counts (prompt and completion), call duration, and any associated costs (calculated by `llm-accounting`), is stored in an SQLite database. By default, this database is named `llm_accounting.db` and is created in the root directory of the project when the first LLM call is made.
+
+This auditing feature is invaluable for:
+*   **Cost Tracking**: Monitoring expenditure related to LLM API usage.
+*   **Debugging**: Reviewing the exact requests and responses when troubleshooting issues.
+*   **Monitoring LLM Usage**: Understanding which models are used, how often, and with what performance characteristics.
+*   **Performance Analysis**: Analyzing token usage and call durations to optimize prompts and model selections.
 >>>>>>> llm-accounting-integration
