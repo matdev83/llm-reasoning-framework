@@ -9,6 +9,7 @@ from src.aot_dataclasses import LLMCallStats # Import LLMCallStats from aot_data
 import logging
 logging.disable(logging.CRITICAL)
 
+
 # Mock for L2TProcessor to be used by the orchestrator tests
 class MockL2TProcessor:
     def __init__(self, llm_client, config):
@@ -16,6 +17,7 @@ class MockL2TProcessor:
         self.config = config
         # We'll mock the 'run' method using unittest.mock.patch on the class instance
         self.run = MagicMock()
+
 
 class TestL2TOrchestrator(unittest.TestCase):
     def setUp(self):
@@ -28,8 +30,8 @@ class TestL2TOrchestrator(unittest.TestCase):
 
     # Patch 'src.l2t_orchestrator.L2TProcessor' so that when L2TOrchestrator
     # tries to instantiate it, it gets our MockL2TProcessor instead.
-    @patch("src.l2t_orchestrator.L2TProcessor", new_callable=lambda: MockL2TProcessor)
-    def test_solve_successful_run(self, mock_processor_constructor):
+    @patch("src.l2t_orchestrator.L2TProcessor") # Patch the class itself
+    def test_solve_successful_run(self, MockL2TProcessorClass):
         problem_text = "Test problem: orchestrator success."
 
         # Create a mock L2TResult for a successful run
@@ -45,19 +47,26 @@ class TestL2TOrchestrator(unittest.TestCase):
             error_message=None,
         )
         
-        # Instantiate the orchestrator. This will use the mocked L2TProcessor.
-        # The mock_processor_constructor itself is the MockL2TProcessor class here due to new_callable.
-        # So, the instance used by orchestrator will have a MagicMock for its 'run' method.
-        orchestrator = L2TOrchestrator(l2t_config=self.config, api_key=self.api_key)
+        # Configure the mock L2TProcessor class to return a MockL2TProcessor instance
+        # when it's instantiated by the orchestrator.
+        mock_processor_instance = MockL2TProcessor(llm_client=MagicMock(), config=self.config)
+        MockL2TProcessorClass.return_value = mock_processor_instance
         
         # Configure the 'run' method of the L2TProcessor instance *inside* the orchestrator
-        orchestrator.l2t_processor.run.return_value = mock_successful_result
+        mock_processor_instance.run.return_value = mock_successful_result
 
+        # Instantiate the orchestrator. This will use the mocked L2TProcessor class,
+        # which in turn returns our configured mock_processor_instance.
+        orchestrator = L2TOrchestrator(l2t_config=self.config, api_key=self.api_key)
+        
         # Call solve
         result_obj, summary_str = orchestrator.solve(problem_text)
 
-        # Assert that L2TProcessor.run was called correctly
-        orchestrator.l2t_processor.run.assert_called_once_with(problem_text)
+        # Assert that L2TProcessor was instantiated correctly
+        MockL2TProcessorClass.assert_called_once_with(llm_client=orchestrator.llm_client, config=self.config)
+        
+        # Assert that the run method on the *instance* was called correctly
+        mock_processor_instance.run.assert_called_once_with(problem_text)
 
         # Assert results
         self.assertEqual(result_obj, mock_successful_result)
@@ -69,8 +78,8 @@ class TestL2TOrchestrator(unittest.TestCase):
         self.assertNotIn("Error Message:", summary_str)
 
 
-    @patch("src.l2t_orchestrator.L2TProcessor", new_callable=lambda: MockL2TProcessor)
-    def test_solve_failed_run(self, mock_processor_constructor):
+    @patch("src.l2t_orchestrator.L2TProcessor") # Patch the class itself
+    def test_solve_failed_run(self, MockL2TProcessorClass):
         problem_text = "Test problem: orchestrator failure."
 
         # Create a mock L2TResult for a failed run
@@ -86,12 +95,15 @@ class TestL2TOrchestrator(unittest.TestCase):
             error_message="Max steps reached during L2T processing.",
         )
 
-        orchestrator = L2TOrchestrator(l2t_config=self.config, api_key=self.api_key)
-        orchestrator.l2t_processor.run.return_value = mock_failed_result
+        mock_processor_instance = MockL2TProcessor(llm_client=MagicMock(), config=self.config)
+        MockL2TProcessorClass.return_value = mock_processor_instance
+        mock_processor_instance.run.return_value = mock_failed_result
 
+        orchestrator = L2TOrchestrator(l2t_config=self.config, api_key=self.api_key)
         result_obj, summary_str = orchestrator.solve(problem_text)
 
-        orchestrator.l2t_processor.run.assert_called_once_with(problem_text)
+        MockL2TProcessorClass.assert_called_once_with(llm_client=orchestrator.llm_client, config=self.config)
+        mock_processor_instance.run.assert_called_once_with(problem_text)
 
         self.assertEqual(result_obj, mock_failed_result)
         self.assertFalse(result_obj.succeeded)
@@ -102,13 +114,14 @@ class TestL2TOrchestrator(unittest.TestCase):
         self.assertIn("Final answer was not successfully obtained.", summary_str)
         self.assertNotIn("Final Answer:\n", summary_str) # Check that final answer section is not there if no answer
 
-    @patch("src.l2t_orchestrator.L2TProcessor", new_callable=lambda: MockL2TProcessor)
-    def test_summary_generation_content(self, mock_processor_constructor):
+    @patch("src.l2t_orchestrator.L2TProcessor") # Patch the class itself
+    def test_summary_generation_content(self, MockL2TProcessorClass):
         problem_text = "Test problem for summary details."
         
+        reasoning_graph_mock = L2TGraph()
         mock_detailed_result = L2TResult(
             final_answer="Detailed answer.",
-            reasoning_graph=L2TGraph(), # Minimal graph for now
+            reasoning_graph=reasoning_graph_mock, # Minimal graph for now
             total_llm_calls=3,
             total_completion_tokens=123,
             total_prompt_tokens=456,
@@ -117,12 +130,13 @@ class TestL2TOrchestrator(unittest.TestCase):
             succeeded=True
         )
         # Add a root node to test graph summary details
-        mock_detailed_result.reasoning_graph.add_node(MagicMock(id="root12345"), is_root=True)
+        reasoning_graph_mock.add_node(MagicMock(id="root12345"), is_root=True)
 
-
-        orchestrator = L2TOrchestrator(l2t_config=self.config, api_key=self.api_key)
-        orchestrator.l2t_processor.run.return_value = mock_detailed_result
+        mock_processor_instance = MockL2TProcessor(llm_client=MagicMock(), config=self.config)
+        MockL2TProcessorClass.return_value = mock_processor_instance
+        mock_processor_instance.run.return_value = mock_detailed_result
         
+        orchestrator = L2TOrchestrator(l2t_config=self.config, api_key=self.api_key)
         _, summary_str = orchestrator.solve(problem_text)
 
         self.assertIn(f"Total LLM Calls: {mock_detailed_result.total_llm_calls}", summary_str)

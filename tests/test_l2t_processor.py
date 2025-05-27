@@ -1,6 +1,5 @@
 import unittest
 from unittest.mock import patch, MagicMock, call
-import uuid
 
 from src.l2t_processor import L2TProcessor
 from src.l2t_dataclasses import (
@@ -97,17 +96,20 @@ class TestL2TProcessor(unittest.TestCase):
 
         self.assertIsNotNone(result.reasoning_graph)
         graph = result.reasoning_graph
+        self.assertIsNotNone(graph.nodes) # Pylance check
         self.assertEqual(len(graph.nodes), 2) # Root node + 1 generated node
 
         root_node_id = graph.root_node_id
-        self.assertIsNotNone(root_node_id)
+        self.assertIsNotNone(root_node_id) # Ensure root_node_id is not None for Pylance
         root_node = graph.get_node(root_node_id)
         self.assertIsNotNone(root_node) # Add check for None
         self.assertEqual(root_node.content, initial_thought_content)
         self.assertEqual(root_node.category, L2TNodeCategory.CONTINUE)
+        self.assertIsNotNone(root_node.children_ids) # Pylance check
         self.assertEqual(len(root_node.children_ids), 1)
 
         child_node_id = root_node.children_ids[0]
+        self.assertIsNotNone(child_node_id) # Pylance check
         child_node = graph.get_node(child_node_id)
         self.assertIsNotNone(child_node) # Add check for None
         self.assertEqual(child_node.content, generated_thought_content)
@@ -173,21 +175,33 @@ class TestL2TProcessor(unittest.TestCase):
 
         graph = result.reasoning_graph
         self.assertIsNotNone(graph)
+        self.assertIsNotNone(graph.nodes) # Pylance check
         # Root, Thought1, Thought2 = 3 nodes
         # Root node (initial_thought_content) -> classified CONTINUE
         # Child 1 (thought_step1_content) from Root -> classified CONTINUE
         # Child 2 (thought_step2_content) from Child 1 -> category is None (not classified)
         self.assertEqual(len(graph.nodes), 3)
-        root_node = graph.get_node(graph.root_node_id)
+        
+        root_node_id = graph.root_node_id
+        self.assertIsNotNone(root_node_id) # Ensure root_node_id is not None for Pylance
+        root_node = graph.get_node(root_node_id)
         self.assertIsNotNone(root_node) # Add check for None
         self.assertEqual(root_node.category, L2TNodeCategory.CONTINUE)
+        self.assertIsNotNone(root_node.children_ids) # Pylance check
         self.assertEqual(len(root_node.children_ids), 1)
-        node1 = graph.get_node(root_node.children_ids[0])
+        
+        node1_id = root_node.children_ids[0]
+        self.assertIsNotNone(node1_id) # Pylance check
+        node1 = graph.get_node(node1_id)
         self.assertIsNotNone(node1) # Add check for None
         self.assertEqual(node1.content, thought_step1_content)
         self.assertEqual(node1.category, L2TNodeCategory.CONTINUE)
+        self.assertIsNotNone(node1.children_ids) # Pylance check
         self.assertEqual(len(node1.children_ids), 1)
-        node2 = graph.get_node(node1.children_ids[0])
+        
+        node2_id = node1.children_ids[0]
+        self.assertIsNotNone(node2_id) # Pylance check
+        node2 = graph.get_node(node2_id)
         self.assertIsNotNone(node2) # Add check for None
         self.assertEqual(node2.content, thought_step2_content)
         self.assertIsNone(node2.category) # Not classified due to max_steps
@@ -214,6 +228,7 @@ class TestL2TProcessor(unittest.TestCase):
         self.assertEqual(result.total_llm_calls, 1)
         self.assertEqual(result.total_completion_tokens, stats_initial.completion_tokens)
         self.assertIsNotNone(result.reasoning_graph) # Graph should exist but be empty/minimal
+        self.assertIsNotNone(result.reasoning_graph.nodes) # Pylance check
         self.assertEqual(len(result.reasoning_graph.nodes), 0) # No root node added
 
 
@@ -236,4 +251,5 @@ class TestL2TProcessor(unittest.TestCase):
         self.assertEqual(result.total_llm_calls, 0) 
         self.assertEqual(result.total_completion_tokens, 0)
         self.assertIsNotNone(result.reasoning_graph)
+        self.assertIsNotNone(result.reasoning_graph.nodes) # Pylance check
         self.assertEqual(len(result.reasoning_graph.nodes), 0)
