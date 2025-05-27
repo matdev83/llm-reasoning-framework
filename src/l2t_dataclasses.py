@@ -2,6 +2,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional
 
+from src.aot_dataclasses import LLMCallStats # Import LLMCallStats
+from src.aot_enums import AssessmentDecision # Import AssessmentDecision
+from src.l2t_enums import L2TTriggerMode # Import L2TTriggerMode
+
 from src.l2t_constants import (
     DEFAULT_L2T_CLASSIFICATION_MODEL_NAMES,
     DEFAULT_L2T_CLASSIFICATION_TEMPERATURE,
@@ -122,3 +126,80 @@ class L2TResult:
     total_process_wall_clock_time_seconds: float = 0.0
     succeeded: bool = False
     error_message: Optional[str] = None
+
+
+@dataclass
+class L2TSolution:
+    """
+    Represents the overall solution and statistics from the L2T Orchestrator,
+    which might involve an assessment, a direct one-shot call, or the full L2T process.
+    """
+    final_answer: Optional[str] = None
+    total_wall_clock_time_seconds: float = 0.0
+
+    # Assessment related
+    assessment_stats: Optional[LLMCallStats] = None
+    assessment_decision: Optional[AssessmentDecision] = None
+
+    # Direct one-shot related (if L2T is bypassed or not triggered)
+    main_call_stats: Optional[LLMCallStats] = None
+
+    # L2T process related
+    l2t_result: Optional[L2TResult] = None
+    l2t_summary_output: Optional[str] = None # The summary string from L2TProcessor
+
+    # Fallback related (if L2T fails or assessment fails)
+    l2t_failed_and_fell_back: bool = False
+    fallback_call_stats: Optional[LLMCallStats] = None
+
+    @property
+    def succeeded(self) -> bool:
+        """
+        Determines if the overall L2T orchestration process succeeded.
+        This is true if a final answer was obtained, either directly,
+        via L2T process, or via a fallback one-shot.
+        """
+        return self.final_answer is not None
+
+    @property
+    def total_completion_tokens(self) -> int:
+        total = 0
+        if self.assessment_stats:
+            total += self.assessment_stats.completion_tokens
+        if self.main_call_stats:
+            total += self.main_call_stats.completion_tokens
+        if self.l2t_result:
+            total += self.l2t_result.total_completion_tokens
+        if self.fallback_call_stats:
+            total += self.fallback_call_stats.completion_tokens
+        return total
+
+    @property
+    def total_prompt_tokens(self) -> int:
+        total = 0
+        if self.assessment_stats:
+            total += self.assessment_stats.prompt_tokens
+        if self.main_call_stats:
+            total += self.main_call_stats.prompt_tokens
+        if self.l2t_result:
+            total += self.l2t_result.total_prompt_tokens
+        if self.fallback_call_stats:
+            total += self.fallback_call_stats.prompt_tokens
+        return total
+
+    @property
+    def grand_total_tokens(self) -> int:
+        return self.total_completion_tokens + self.total_prompt_tokens
+
+    @property
+    def total_llm_interaction_time_seconds(self) -> float:
+        total = 0.0
+        if self.assessment_stats:
+            total += self.assessment_stats.call_duration_seconds
+        if self.main_call_stats:
+            total += self.main_call_stats.call_duration_seconds
+        if self.l2t_result:
+            total += self.l2t_result.total_llm_interaction_time_seconds
+        if self.fallback_call_stats:
+            total += self.fallback_call_stats.call_duration_seconds
+        return total
