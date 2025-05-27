@@ -2,7 +2,8 @@ import unittest
 from unittest.mock import patch, MagicMock
 
 from src.l2t_orchestrator import L2TOrchestrator
-from src.l2t_dataclasses import L2TConfig, L2TResult, L2TGraph, LLMCallStats
+from src.l2t_dataclasses import L2TConfig, L2TResult, L2TGraph
+from src.aot_dataclasses import LLMCallStats # Import LLMCallStats from aot_dataclasses
 
 # Suppress logging during tests
 import logging
@@ -134,7 +135,3 @@ class TestL2TOrchestrator(unittest.TestCase):
         self.assertIn(f"Number of nodes in graph: {len(mock_detailed_result.reasoning_graph.nodes)}", summary_str)
         self.assertIn(f"Root node ID: {mock_detailed_result.reasoning_graph.root_node_id[:8]}", summary_str)
         self.assertIn(f"Final Answer:\n{mock_detailed_result.final_answer}", summary_str)
-
-if __name__ == "__main__":
-    logging.disable(logging.NOTSET) # Re-enable logging
-    unittest.main()

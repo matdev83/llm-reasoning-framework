@@ -1,6 +1,9 @@
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional
+
+from src.l2t_constants import (
+    DEFAULT_L2T_CLASSIFICATION_MODEL_NAMES,
     DEFAULT_L2T_CLASSIFICATION_TEMPERATURE,
     DEFAULT_L2T_INITIAL_PROMPT_MODEL_NAMES,
     DEFAULT_L2T_INITIAL_PROMPT_TEMPERATURE,
@@ -12,14 +15,6 @@ from typing import Dict, List, Optional
     DEFAULT_L2T_X_EVA_DEFAULT,
     DEFAULT_L2T_X_FMT_DEFAULT,
 )
-
-
-@dataclass
-class LLMCallStats:
-    completion_tokens: int = 0
-    prompt_tokens: int = 0
-    call_duration_seconds: float = 0.0
-    model_name: Optional[str] = None
 
 
 class L2TNodeCategory(Enum):

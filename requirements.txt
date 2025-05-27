@@ -2,4 +2,4 @@
 openai
 llm-accounting
 requests
-sqlalchemy
+pytest

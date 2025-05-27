@@ -1,8 +1,11 @@
-import os
 import sys
+import os
 import argparse
 import logging
 from typing import Optional
+
+# Add the project root to the Python path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.aot_enums import AotTriggerMode
 from src.aot_dataclasses import AoTRunnerConfig

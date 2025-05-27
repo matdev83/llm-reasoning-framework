@@ -3,27 +3,8 @@ import logging
 import uuid  # For generating unique node IDs
 from typing import Optional, Tuple
 
-# Assuming llm_client will be available in the environment where this is run.
-# For local testing, you might need to adjust this import or provide a mock.
-# from src.llm_client import LLMClient
-# Placeholder for LLMClient to allow linting and type checking
-class LLMClient:
-    def call(self, prompt: str, models: list[str], temperature: float) -> Tuple[str, Optional["LLMCallStats"]]: # type: ignore
-        # This is a mock implementation. Replace with actual LLM client.
-        print(f"LLMClient.call received prompt:\n{prompt[:200]}...\nModels: {models}, Temp: {temperature}")
-        if "initial" in prompt.lower():
-            return "Your thought: This is the initial thought from the LLM.", LLMCallStats(completion_tokens=10, prompt_tokens=5, call_duration_seconds=1.0, model_name=models[0] if models else "test_initial_model")
-        elif "classify" in prompt.lower():
-            # Simulate different classification outputs
-            if "terminate" in prompt.lower(): # test condition
-                 return "Your classification: TERMINATE_BRANCH", LLMCallStats(completion_tokens=5, prompt_tokens=5, call_duration_seconds=0.5, model_name=models[0] if models else "test_classify_model")
-            if "final answer" in prompt.lower(): # test condition for final answer
-                 return "Your classification: FINAL_ANSWER", LLMCallStats(completion_tokens=5, prompt_tokens=5, call_duration_seconds=0.5, model_name=models[0] if models else "test_classify_model")
-            return "Your classification: CONTINUE", LLMCallStats(completion_tokens=5, prompt_tokens=5, call_duration_seconds=0.5, model_name=models[0] if models else "test_classify_model")
-        elif "thought" in prompt.lower():
-            return f"Your new thought: This is a new thought generated from parent. UUID: {uuid.uuid4()}", LLMCallStats(completion_tokens=15, prompt_tokens=10, call_duration_seconds=1.2, model_name=models[0] if models else "test_thought_gen_model")
-        return "Error: Unknown prompt type for mock LLM.", None
-
+from src.llm_client import LLMClient # Use the actual LLMClient
+from src.aot_dataclasses import LLMCallStats # Import LLMCallStats from aot_dataclasses
 
 from src.l2t_dataclasses import (
     L2TConfig,
@@ -31,7 +12,6 @@ from src.l2t_dataclasses import (
     L2TNode,
     L2TNodeCategory,
     L2TResult,
-    LLMCallStats, # Added LLMCallStats
 )
 from src.l2t_prompt_generator import L2TPromptGenerator
 from src.l2t_response_parser import L2TResponseParser
@@ -49,8 +29,8 @@ class L2TProcessor:
             logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
-    def _update_result_stats(self, result: L2TResult, stats: Optional[LLMCallStats]):
-        if stats:
+    def _update_result_stats(self, result: L2TResult, stats: LLMCallStats): # stats is no longer Optional here
+        if stats: # This check is technically redundant if stats is not Optional, but harmless
             result.total_llm_calls += 1
             result.total_completion_tokens += stats.completion_tokens
             result.total_prompt_tokens += stats.prompt_tokens
@@ -296,127 +276,3 @@ class L2TProcessor:
             f"Final Answer: {result.final_answer[:200] if result.final_answer else 'None'}"
         )
         return result
-
-# Basic test setup
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    logger.info("Starting L2TProcessor basic test.")
-
-    mock_llm_client = LLMClient()
-    custom_config = L2TConfig(
-        max_steps=5,
-        max_total_nodes=10,
-        max_time_seconds=30,
-        initial_prompt_model_names=["mock-initial"],
-        classification_model_names=["mock-classifier"],
-        thought_generation_model_names=["mock-generator"],
-    )
-
-    processor = L2TProcessor(llm_client=mock_llm_client, config=custom_config)
-
-    problem = "Solve the riddle: What has an eye, but cannot see?"
-    
-    # Test 1: Normal run
-    logger.info(f"\n--- Test 1: Running L2T for problem: '{problem}' ---")
-    l2t_result = processor.run(problem_text=problem)
-
-    print("\n--- L2T Result (Test 1) ---")
-    print(f"Succeeded: {l2t_result.succeeded}")
-    print(f"Final Answer: {l2t_result.final_answer}")
-    print(f"Error Message: {l2t_result.error_message}")
-    print(f"Total LLM Calls: {l2t_result.total_llm_calls}")
-    print(f"Total Completion Tokens: {l2t_result.total_completion_tokens}")
-    print(f"Total Prompt Tokens: {l2t_result.total_prompt_tokens}")
-    print(f"Total LLM Interaction Time (s): {l2t_result.total_llm_interaction_time_seconds:.2f}")
-    print(f"Total Process Wall Clock Time (s): {l2t_result.total_process_wall_clock_time_seconds:.2f}")
-
-    if l2t_result.reasoning_graph:
-        print(f"Number of nodes in graph: {len(l2t_result.reasoning_graph.nodes)}")
-        # Optional: Print graph details
-        # for node_id, node_obj in l2t_result.reasoning_graph.nodes.items():
-        #     print(f"  Node {node_id[:8]}: '{node_obj.content[:50]}...' (Parent: {node_obj.parent_id[:8] if node_obj.parent_id else 'None'}, Category: {node_obj.category})")
-
-    # Test 2: Simulate LLM failure at initial step
-    class FailingLLMClient(LLMClient):
-        def call(self, prompt: str, models: list[str], temperature: float) -> Tuple[str, Optional["LLMCallStats"]]:
-            if "initial" in prompt.lower():
-                return "Error: LLM unavailable", None # Simulate error
-            return super().call(prompt, models, temperature)
-
-    logger.info(f"\n--- Test 2: Running L2T with initial LLM failure ---")
-    failing_processor = L2TProcessor(llm_client=FailingLLMClient(), config=custom_config)
-    l2t_result_fail_initial = failing_processor.run(problem_text="Test initial failure")
-    print("\n--- L2T Result (Test 2 - Initial Failure) ---")
-    print(f"Succeeded: {l2t_result_fail_initial.succeeded}")
-    print(f"Error Message: {l2t_result_fail_initial.error_message}")
-
-    # Test 3: Simulate classification failure leading to TERMINATE_BRANCH
-    class ClassificationFailLLMClient(LLMClient):
-         def call(self, prompt: str, models: list[str], temperature: float) -> Tuple[str, Optional["LLMCallStats"]]:
-            if "classify" in prompt.lower() and "This is the initial thought" in prompt: # Only fail for the first classification
-                return "Error: Classification LLM error", None
-            return super().call(prompt, models, temperature)
-
-    logger.info(f"\n--- Test 3: Running L2T with classification LLM failure ---")
-    classification_fail_processor = L2TProcessor(llm_client=ClassificationFailLLMClient(), config=custom_config)
-    l2t_result_fail_classify = classification_fail_processor.run(problem_text="Test classification failure")
-    print("\n--- L2T Result (Test 3 - Classification Failure) ---")
-    print(f"Succeeded: {l2t_result_fail_classify.succeeded}")
-    print(f"Error Message: {l2t_result_fail_classify.error_message}")
-    if l2t_result_fail_classify.reasoning_graph and l2t_result_fail_classify.reasoning_graph.root_node_id:
-        root_node_eval = l2t_result_fail_classify.reasoning_graph.get_node(l2t_result_fail_classify.reasoning_graph.root_node_id)
-        if root_node_eval:
-            print(f"Root node classification: {root_node_eval.category}")
-
-    # Test 4: Simulate thought generation failure
-    class ThoughtGenFailLLMClient(LLMClient):
-         def call(self, prompt: str, models: list[str], temperature: float) -> Tuple[str, Optional["LLMCallStats"]]:
-            if "generate the next single thought" in prompt.lower():
-                return "Error: Thought gen LLM error", None
-            return super().call(prompt, models, temperature)
-
-    logger.info(f"\n--- Test 4: Running L2T with thought generation LLM failure ---")
-    thought_gen_fail_processor = L2TProcessor(llm_client=ThoughtGenFailLLMClient(), config=custom_config)
-    l2t_result_fail_thought_gen = thought_gen_fail_processor.run(problem_text="Test thought gen failure")
-    print("\n--- L2T Result (Test 4 - Thought Gen Failure) ---")
-    print(f"Succeeded: {l2t_result_fail_thought_gen.succeeded}")
-    print(f"Error Message: {l2t_result_fail_thought_gen.error_message}")
-    if l2t_result_fail_thought_gen.reasoning_graph:
-        print(f"Nodes generated: {len(l2t_result_fail_thought_gen.reasoning_graph.nodes)}")
-
-
-    # Test 5: Max steps reached
-    logger.info(f"\n--- Test 5: Max steps reached ---")
-    max_steps_config = L2TConfig(max_steps=1, max_total_nodes=5) # Will only do initial + 1 step
-    max_steps_processor = L2TProcessor(llm_client=LLMClient(), config=max_steps_config)
-    l2t_result_max_steps = max_steps_processor.run(problem_text="Test max steps")
-    print("\n--- L2T Result (Test 5 - Max Steps) ---")
-    print(f"Succeeded: {l2t_result_max_steps.succeeded}")
-    print(f"Error Message: {l2t_result_max_steps.error_message}")
-    print(f"Steps taken (current_process_step value): Not directly available, but should be 1")
-    print(f"Graph nodes: {len(l2t_result_max_steps.reasoning_graph.nodes)}")
-
-
-    # Test 6: Final Answer found
-    class FinalAnswerLLMClient(LLMClient):
-        _call_count = 0
-        def call(self, prompt: str, models: list[str], temperature: float) -> Tuple[str, Optional["LLMCallStats"]]:
-            FinalAnswerLLMClient._call_count +=1
-            if "classify" in prompt.lower():
-                # Classify as FINAL_ANSWER on the second classification call (first generated node)
-                if FinalAnswerLLMClient._call_count > 2 : # Initial call, first classify, second classify
-                    return "Your classification: FINAL_ANSWER", LLMCallStats(completion_tokens=5, prompt_tokens=5, call_duration_seconds=0.5, model_name=models[0])
-            return super().call(prompt, models, temperature)
-
-    logger.info(f"\n--- Test 6: Final Answer ---")
-    FinalAnswerLLMClient._call_count = 0 # Reset counter
-    final_answer_processor = L2TProcessor(llm_client=FinalAnswerLLMClient(), config=custom_config)
-    l2t_result_final_answer = final_answer_processor.run(problem_text="Test final answer")
-    print("\n--- L2T Result (Test 6 - Final Answer) ---")
-    print(f"Succeeded: {l2t_result_final_answer.succeeded}")
-    print(f"Final Answer: {l2t_result_final_answer.final_answer}")
-    print(f"Error Message: {l2t_result_final_answer.error_message}")
-    print(f"Graph nodes: {len(l2t_result_final_answer.reasoning_graph.nodes)}")
-    print(f"LLM Calls: {l2t_result_final_answer.total_llm_calls}")
-
-    logger.info("L2TProcessor basic tests completed.")

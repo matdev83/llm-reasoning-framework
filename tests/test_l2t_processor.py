@@ -8,19 +8,16 @@ from src.l2t_dataclasses import (
     L2TResult,
     L2TGraph,
     L2TNodeCategory,
-    LLMCallStats,
     L2TNode,
 )
+from src.aot_dataclasses import LLMCallStats # Import LLMCallStats from aot_dataclasses
 # Use the mock LLMClient from l2t_processor for testing if it's suitable,
 # or define a more controlled one here.
 # from src.l2t_processor import LLMClient # Mock LLMClient
 # For more control, we'll use MagicMock for LLMClient
 # from src.llm_client import LLMClient # Assuming this is the actual client path
 
-# Placeholder for the actual LLMClient to be mocked
-class LLMClient:
-    def call(self, prompt: str, models: list[str], temperature: float):
-        pass
+from src.llm_client import LLMClient # Import the actual LLMClient
 
 # Suppress logging during tests
 import logging
@@ -46,10 +43,10 @@ class TestL2TProcessor(unittest.TestCase):
     @patch("src.l2t_response_parser.L2TResponseParser.parse_l2t_thought_generation_response")
     @patch("src.l2t_response_parser.L2TResponseParser.parse_l2t_node_classification_response")
     @patch("src.l2t_response_parser.L2TResponseParser.parse_l2t_initial_response")
-    @patch("src.l2t_processor.LLMClient.call") # Mocking the call method of LLMClient used by L2TProcessor
+    @patch("src.l2t_processor.LLMClient") # Patch the class itself
     def test_run_successful_path_with_final_answer(
         self,
-        mock_llm_call,
+        MockLLMClient, # This is the mock class
         mock_parse_initial,
         mock_parse_classify,
         mock_parse_thought_gen,
@@ -66,7 +63,7 @@ class TestL2TProcessor(unittest.TestCase):
         stats_classify2 = LLMCallStats(completion_tokens=5, prompt_tokens=5, call_duration_seconds=0.05, model_name="classify_model")
 
         # Configure mock LLMClient.call responses
-        mock_llm_call.side_effect = [
+        MockLLMClient.return_value.call.side_effect = [
             ("Your thought: " + initial_thought_content, stats_initial),  # Initial thought
             ("Your classification: CONTINUE", stats_classify1),            # Classification of initial thought
             ("Your new thought: " + generated_thought_content, stats_thought_gen), # Generated thought
@@ -82,15 +79,9 @@ class TestL2TProcessor(unittest.TestCase):
         mock_parse_thought_gen.return_value = generated_thought_content
         
         # --- Instantiate and Run ---
-        # We need to pass an instance of an LLMClient to L2TProcessor.
-        # The @patch above targets 'src.l2t_processor.LLMClient.call',
-        # so any LLMClient instance created by L2TProcessor will use this mock method.
-        # For this to work, L2TProcessor MUST import LLMClient as `from src.l2t_processor import LLMClient`
-        # OR `from src.llm_client import LLMClient` if that's the actual path, and the patch needs to match.
-        # The L2TProcessor file has a placeholder LLMClient, so we patch that one.
-        mock_llm_client_instance = LLMClient() # This instance's .call will be the mock_llm_call
-
-        processor = L2TProcessor(llm_client=mock_llm_client_instance, config=self.config)
+        # The @patch above targets 'src.l2t_processor.LLMClient',
+        # so MockLLMClient is the mock class. We pass its instance to L2TProcessor.
+        processor = L2TProcessor(llm_client=MockLLMClient.return_value, config=self.config)
         result = processor.run(problem_text)
 
         # --- Assertions ---
@@ -111,12 +102,14 @@ class TestL2TProcessor(unittest.TestCase):
         root_node_id = graph.root_node_id
         self.assertIsNotNone(root_node_id)
         root_node = graph.get_node(root_node_id)
+        self.assertIsNotNone(root_node) # Add check for None
         self.assertEqual(root_node.content, initial_thought_content)
         self.assertEqual(root_node.category, L2TNodeCategory.CONTINUE)
         self.assertEqual(len(root_node.children_ids), 1)
 
         child_node_id = root_node.children_ids[0]
         child_node = graph.get_node(child_node_id)
+        self.assertIsNotNone(child_node) # Add check for None
         self.assertEqual(child_node.content, generated_thought_content)
         self.assertEqual(child_node.category, L2TNodeCategory.FINAL_ANSWER)
         self.assertEqual(child_node.parent_id, root_node_id)
@@ -128,10 +121,10 @@ class TestL2TProcessor(unittest.TestCase):
     @patch("src.l2t_response_parser.L2TResponseParser.parse_l2t_thought_generation_response")
     @patch("src.l2t_response_parser.L2TResponseParser.parse_l2t_node_classification_response")
     @patch("src.l2t_response_parser.L2TResponseParser.parse_l2t_initial_response")
-    @patch("src.l2t_processor.LLMClient.call")
+    @patch("src.l2t_processor.LLMClient") # Patch the class itself
     def test_run_max_steps_reached(
         self,
-        mock_llm_call,
+        MockLLMClient, # This is the mock class
         mock_parse_initial,
         mock_parse_classify,
         mock_parse_thought_gen,
@@ -147,17 +140,21 @@ class TestL2TProcessor(unittest.TestCase):
         stats = LLMCallStats(completion_tokens=1, prompt_tokens=1, call_duration_seconds=0.01)
 
         # Mock LLM calls to always continue generating
-        mock_llm_call.return_value = ("Mocked LLM Response", stats) # Generic response for all calls
+        MockLLMClient.return_value.call.side_effect = [
+            ("Mocked LLM Response", stats), # Initial thought
+            ("Mocked LLM Response", stats), # Classification of initial thought
+            ("Mocked LLM Response", stats), # Generated thought 1
+            ("Mocked LLM Response", stats), # Classification of thought 1
+            ("Mocked LLM Response", stats), # Generated thought 2
+        ]
 
         # Mock Parser responses
         mock_parse_initial.return_value = initial_thought_content
         mock_parse_classify.return_value = L2TNodeCategory.CONTINUE # Always continue
-        # mock_parse_thought_gen.return_value = "Generated thought." # Always generate successfully
         mock_parse_thought_gen.side_effect = [thought_step1_content, thought_step2_content, "Should not reach here"]
 
 
-        mock_llm_client_instance = LLMClient()
-        processor = L2TProcessor(llm_client=mock_llm_client_instance, config=self.config)
+        processor = L2TProcessor(llm_client=MockLLMClient.return_value, config=self.config)
         result = processor.run(problem_text)
 
         self.assertFalse(result.succeeded)
@@ -171,7 +168,7 @@ class TestL2TProcessor(unittest.TestCase):
         # Loop terminates because current_process_step (which is 2) >= self.config.max_steps (which is 2)
         # So, thought 2 is generated, but not classified.
         # Total calls: 1 (initial) + 1 (classify initial) + 1 (gen T1) + 1 (classify T1) + 1 (gen T2) = 5 calls
-        self.assertEqual(mock_llm_call.call_count, 5) 
+        self.assertEqual(MockLLMClient.return_value.call.call_count, 5) 
         self.assertEqual(result.total_llm_calls, 5)
 
         graph = result.reasoning_graph
@@ -182,31 +179,33 @@ class TestL2TProcessor(unittest.TestCase):
         # Child 2 (thought_step2_content) from Child 1 -> category is None (not classified)
         self.assertEqual(len(graph.nodes), 3)
         root_node = graph.get_node(graph.root_node_id)
+        self.assertIsNotNone(root_node) # Add check for None
         self.assertEqual(root_node.category, L2TNodeCategory.CONTINUE)
         self.assertEqual(len(root_node.children_ids), 1)
         node1 = graph.get_node(root_node.children_ids[0])
+        self.assertIsNotNone(node1) # Add check for None
         self.assertEqual(node1.content, thought_step1_content)
         self.assertEqual(node1.category, L2TNodeCategory.CONTINUE)
         self.assertEqual(len(node1.children_ids), 1)
         node2 = graph.get_node(node1.children_ids[0])
+        self.assertIsNotNone(node2) # Add check for None
         self.assertEqual(node2.content, thought_step2_content)
         self.assertIsNone(node2.category) # Not classified due to max_steps
 
 
     @patch("src.l2t_response_parser.L2TResponseParser.parse_l2t_initial_response")
-    @patch("src.l2t_processor.LLMClient.call")
+    @patch("src.l2t_processor.LLMClient") # Patch the class itself
     def test_run_initial_thought_generation_failure_parsing(
-        self, mock_llm_call, mock_parse_initial
+        self, MockLLMClient, mock_parse_initial
     ):
         problem_text = "Test problem: Initial failure."
         stats_initial = LLMCallStats(completion_tokens=1, prompt_tokens=1, call_duration_seconds=0.01)
 
         # Mock LLM to return something unparseable by the initial parser
-        mock_llm_call.return_value = ("This is not a valid initial thought format.", stats_initial)
+        MockLLMClient.return_value.call.return_value = ("This is not a valid initial thought format.", stats_initial)
         mock_parse_initial.return_value = None # Simulate parser failure
 
-        mock_llm_client_instance = LLMClient()
-        processor = L2TProcessor(llm_client=mock_llm_client_instance, config=self.config)
+        processor = L2TProcessor(llm_client=MockLLMClient.return_value, config=self.config)
         result = processor.run(problem_text)
 
         self.assertFalse(result.succeeded)
@@ -218,17 +217,16 @@ class TestL2TProcessor(unittest.TestCase):
         self.assertEqual(len(result.reasoning_graph.nodes), 0) # No root node added
 
 
-    @patch("src.l2t_processor.LLMClient.call")
+    @patch("src.l2t_processor.LLMClient") # Patch the class itself
     def test_run_initial_thought_generation_failure_llm_error(
-        self, mock_llm_call
+        self, MockLLMClient
     ):
         problem_text = "Test problem: Initial LLM error."
 
         # Mock LLM to return an error string
-        mock_llm_call.return_value = ("Error: LLM unavailable", None) # No stats if LLM call fails
+        MockLLMClient.return_value.call.return_value = ("Error: LLM unavailable", None) # No stats if LLM call fails
 
-        mock_llm_client_instance = LLMClient()
-        processor = L2TProcessor(llm_client=mock_llm_client_instance, config=self.config)
+        processor = L2TProcessor(llm_client=MockLLMClient.return_value, config=self.config)
         result = processor.run(problem_text)
 
         self.assertFalse(result.succeeded)
@@ -239,8 +237,3 @@ class TestL2TProcessor(unittest.TestCase):
         self.assertEqual(result.total_completion_tokens, 0)
         self.assertIsNotNone(result.reasoning_graph)
         self.assertEqual(len(result.reasoning_graph.nodes), 0)
-
-
-if __name__ == "__main__":
-    logging.disable(logging.NOTSET) # Re-enable logging for direct script run
-    unittest.main()

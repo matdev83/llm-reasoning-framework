@@ -3,26 +3,7 @@ import logging
 import io # For string buffer if generating a summary string
 
 from src.l2t_dataclasses import L2TConfig, L2TResult # LLMCallStats is aggregated in L2TResult
-# Assuming llm_client will be available in the environment where this is run.
-# For local testing, you might need to adjust this import or provide a mock.
-# from src.llm_client import LLMClient
-# Placeholder for LLMClient to allow linting and type checking
-class LLMClient:
-    def __init__(self, api_key: str): # type: ignore
-        # This is a mock implementation. Replace with actual LLM client.
-        self.api_key = api_key
-        if not api_key:
-             raise ValueError("API key is required for LLMClient")
-        print(f"Mock LLMClient initialized with api_key: {'*' * len(api_key) if api_key else 'None'}")
-
-    def call(self, prompt: str, models: list[str], temperature: float): # type: ignore
-        # This is a mock implementation. Replace with actual LLM client.
-        # This mock is simpler than the L2TProcessor's one as the orchestrator doesn't directly call it.
-        # The L2TProcessor will use its own more detailed mock or a real client.
-        print(f"Orchestrator's LLMClient.call (should not be directly called by orchestrator logic normally) with prompt: {prompt[:100]}")
-        # This call method is primarily for the L2TProcessor's instantiation.
-        # The L2TProcessor itself has a more detailed mock for its internal calls.
-        return "Mock LLM Response from Orchestrator's client instance", None
+from src.llm_client import LLMClient # Use the actual LLMClient
 
 
 from src.l2t_processor import L2TProcessor
@@ -97,65 +78,3 @@ class L2TOrchestrator:
         # logger.info(f"L2T Orchestration total wall-clock time: {orchestration_total_time:.2f}s (includes summary generation)")
 
         return l2t_result, summary_output
-
-if __name__ == '__main__':
-    # This basic test assumes L2TProcessor's mock LLM client is sufficient for its internal operations.
-    # The LLMClient passed here is for the L2TProcessor's __init__ method.
-    
-    logger.info("--- Starting L2TOrchestrator basic test ---")
-
-    # 1. Setup Config
-    test_config = L2TConfig(
-        max_steps=4, # Keep low for testing
-        max_total_nodes=8,
-        max_time_seconds=60,
-        classification_model_names=["test-classify-model"],
-        thought_generation_model_names=["test-thought-gen-model"],
-        initial_prompt_model_names=["test-initial-model"]
-    )
-
-    # 2. Instantiate Orchestrator
-    # Ensure you have a dummy API key or adjust LLMClient mock if needed
-    try:
-        orchestrator = L2TOrchestrator(l2t_config=test_config, api_key="dummy_api_key_for_l2t_orchestrator")
-    except Exception as e:
-        logger.error(f"Failed to initialize L2TOrchestrator: {e}")
-        exit(1)
-
-    # 3. Define a problem
-    problem1 = "What is the capital of France, and what are two interesting facts about it?"
-    logger.info(f"\n--- Test Case 1: Problem: '{problem1}' ---")
-
-    # 4. Call solve
-    l2t_result_obj, summary_str = orchestrator.solve(problem_text=problem1)
-
-    # 5. Print parts of the result and summary (summary is already logged)
-    print("\n--- Orchestrator Test Case 1 Results ---")
-    print(f"Result Object - Succeeded: {l2t_result_obj.succeeded}")
-    print(f"Result Object - Final Answer: {l2t_result_obj.final_answer[:200] if l2t_result_obj.final_answer else 'N/A'}...")
-    print(f"Result Object - Error: {l2t_result_obj.error_message}")
-    print(f"Summary String was logged above.")
-
-
-    # Example: Problem that might lead to early termination if mock LLM is configured for it
-    # For L2TProcessor's current mock, it will likely run until max_steps or max_nodes
-    # unless specific keywords trigger FINAL_ANSWER or TERMINATE_BRANCH in its mock LLM.
-    problem2 = "This is a problem designed to find a final answer quickly." # Mock needs to support this
-    # To test this, the L2TProcessor's mock LLMClient would need to be adjusted to produce FINAL_ANSWER
-    # for a thought containing "final answer" for example.
-    # The current L2TProcessor mock LLMClient has:
-    # if "final answer" in prompt.lower(): # test condition for final answer
-    #    return "Your classification: FINAL_ANSWER", LLMCallStats(...)
-    # So if a thought contains "final answer", it should be classified as such.
-    # Let's assume the initial thought or a subsequent thought might contain this.
-
-    logger.info(f"\n--- Test Case 2: Problem: '{problem2}' (testing for potential early FINAL_ANSWER) ---")
-    # Re-using the same orchestrator instance
-    l2t_result_obj_2, summary_str_2 = orchestrator.solve(problem_text=problem2)
-
-    print("\n--- Orchestrator Test Case 2 Results ---")
-    print(f"Result Object - Succeeded: {l2t_result_obj_2.succeeded}")
-    print(f"Result Object - Final Answer: {l2t_result_obj_2.final_answer[:200] if l2t_result_obj_2.final_answer else 'N/A'}...")
-    print(f"Result Object - Error: {l2t_result_obj_2.error_message}")
-
-    logger.info("--- L2TOrchestrator basic test completed ---")

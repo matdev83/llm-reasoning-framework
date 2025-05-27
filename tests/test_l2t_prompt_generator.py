@@ -8,7 +8,7 @@ from src.l2t_constants import DEFAULT_L2T_X_FMT_DEFAULT, DEFAULT_L2T_X_EVA_DEFAU
 class TestL2TPromptGenerator(unittest.TestCase):
     def setUp(self):
         self.config = L2TConfig()
-        self.prompt_generator = L2TPromptGenerator(config=self.config)
+        self.prompt_generator = L2TPromptGenerator(l2t_config=self.config)
 
     def test_construct_l2t_initial_prompt_default_templates(self):
         problem_text = "What is the meaning of life?"
