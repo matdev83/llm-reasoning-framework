@@ -1,0 +1,14 @@
+Current reasoning context:
+{{graph_context}}
+
+Thought to classify: "{{node_to_classify_content}}"
+
+Evaluation criteria for thoughts: {{x_eva}}
+
+Based on the context and evaluation criteria, classify this thought. Choose one of the following categories:
+- CONTINUE: Further reasoning should proceed from this thought.
+- TERMINATE_BRANCH: This line of reasoning should not be pursued further.
+- FINAL_ANSWER: This thought represents the final solution to the problem.
+- BACKTRACK: Reasoning should backtrack and continue from a previous thought (e.g., parent or ancestor).
+
+Your classification (must be one of the exact category names CONTINUE, TERMINATE_BRANCH, FINAL_ANSWER, BACKTRACK):
