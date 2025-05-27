@@ -11,6 +11,8 @@ from src.aot_enums import AssessmentDecision # Import AssessmentDecision
 import logging
 logging.disable(logging.CRITICAL)
 
+from src.heuristic_detector import HeuristicDetector # Import HeuristicDetector
+from typing import Optional # Import Optional
 
 # Mock for L2TProcessor to be used by the orchestrator tests
 class MockL2TProcessor:
@@ -21,13 +23,19 @@ class MockL2TProcessor:
 
 # Mock for ComplexityAssessor
 class MockComplexityAssessor:
-    def __init__(self, llm_client, small_model_names, temperature, use_heuristic_shortcut):
+    def __init__(self, llm_client, small_model_names, temperature, use_heuristic_shortcut, heuristic_detector: Optional[HeuristicDetector] = None):
         self.llm_client = llm_client
         self.small_model_names = small_model_names
         self.temperature = temperature
         self.use_heuristic_shortcut = use_heuristic_shortcut
+        self.heuristic_detector = heuristic_detector # Store the passed detector
         self.assess = MagicMock()
 
+# Mock for HeuristicDetector
+class MockHeuristicDetector(HeuristicDetector): # Inherit from HeuristicDetector
+    def __init__(self):
+        super().__init__() # Call the parent constructor if it has any initialization
+        self.should_trigger_complex_process_heuristically = MagicMock(return_value=True) # Default to True for testing
 
 class TestL2TOrchestrator(unittest.TestCase):
     def setUp(self):
@@ -42,7 +50,7 @@ class TestL2TOrchestrator(unittest.TestCase):
         self.assessment_model_names = ["test-assessment-model"]
         self.assessment_temperature = 0.0
 
-    def _create_orchestrator(self, trigger_mode: L2TTriggerMode, use_heuristic_shortcut: bool = True):
+    def _create_orchestrator(self, trigger_mode: L2TTriggerMode, use_heuristic_shortcut: bool = True, heuristic_detector: Optional[HeuristicDetector] = None):
         return L2TOrchestrator(
             trigger_mode=trigger_mode,
             l2t_config=self.l2t_config,
@@ -51,7 +59,8 @@ class TestL2TOrchestrator(unittest.TestCase):
             assessment_model_names=self.assessment_model_names,
             assessment_temperature=self.assessment_temperature,
             api_key=self.api_key,
-            use_heuristic_shortcut=use_heuristic_shortcut
+            use_heuristic_shortcut=use_heuristic_shortcut,
+            heuristic_detector=heuristic_detector # Pass the custom detector
         )
 
     @patch("src.l2t_orchestrator.L2TProcessor")
@@ -433,3 +442,73 @@ class TestL2TOrchestrator(unittest.TestCase):
         self.assertIn(f"Total Prompt Tokens (All Calls): {expected_total_prompt_fallback}", summary_str_fallback)
         self.assertIn(f"Grand Total Tokens (All Calls): {expected_total_completion_fallback + expected_total_prompt_fallback}", summary_str_fallback)
         self.assertIn(f"Total LLM Interaction Time (All Calls): {expected_total_llm_time_fallback:.2f}s", summary_str_fallback)
+
+    @patch("src.l2t_orchestrator.L2TProcessor") # Add this patch
+    @patch("src.l2t_orchestrator.ComplexityAssessor")
+    @patch("src.l2t_orchestrator.LLMClient")
+    def test_solve_assess_first_with_custom_heuristic_detector(self, MockLLMClient, MockComplexityAssessorClass, MockL2TProcessorClass): # Add MockL2TProcessorClass
+        problem_text = "Test problem with custom heuristic detector."
+        
+        # Create a custom mock heuristic detector
+        custom_heuristic_detector = MockHeuristicDetector()
+        # Configure it to return True, meaning it triggers the complex process
+        custom_heuristic_detector.should_trigger_complex_process_heuristically.return_value = True
+
+        mock_assessment_stats = LLMCallStats(model_name="assess-model", prompt_tokens=5, completion_tokens=1, call_duration_seconds=0.2)
+
+        # Mock the ComplexityAssessor's instance that L2TOrchestrator will create
+        # Set the heuristic_detector attribute on the mocked ComplexityAssessor instance
+        MockComplexityAssessorClass.return_value.heuristic_detector = custom_heuristic_detector
+
+        # Define a side effect for the assess method of the mocked ComplexityAssessor instance
+        # This simulates the internal logic of ComplexityAssessor calling the heuristic detector
+        def mock_assess_side_effect(problem_text: str):
+            # Simulate the heuristic check
+            if MockComplexityAssessorClass.return_value.use_heuristic_shortcut:
+                if MockComplexityAssessorClass.return_value.heuristic_detector.should_trigger_complex_process_heuristically(problem_text):
+                    return AssessmentDecision.AOT, mock_assessment_stats
+            # Fallback if heuristic not used or doesn't trigger (though in this test, it should trigger AOT)
+            return AssessmentDecision.ONESHOT, LLMCallStats(model_name="mock_llm_assess", prompt_tokens=1, completion_tokens=1, call_duration_seconds=0.1)
+
+        MockComplexityAssessorClass.return_value.assess.side_effect = mock_assess_side_effect
+
+        # Mock the L2TProcessor's run method to return a concrete L2TResult
+        mock_l2t_result = L2TResult(
+            final_answer="L2T answer from custom heuristic test.",
+            reasoning_graph=L2TGraph(),
+            total_llm_calls=1,
+            total_completion_tokens=10,
+            total_prompt_tokens=20,
+            total_llm_interaction_time_seconds=0.1,
+            total_process_wall_clock_time_seconds=0.2,
+            succeeded=True,
+            error_message=None,
+        )
+        MockL2TProcessorClass.return_value.run.return_value = mock_l2t_result
+
+        # Create the orchestrator, passing the custom heuristic detector
+        orchestrator = self._create_orchestrator(
+            trigger_mode=L2TTriggerMode.ASSESS_FIRST,
+            use_heuristic_shortcut=True,
+            heuristic_detector=custom_heuristic_detector
+        )
+        
+        # Call solve
+        solution, summary_str = orchestrator.solve(problem_text)
+
+        # Assert that the custom heuristic detector's method was called
+        custom_heuristic_detector.should_trigger_complex_process_heuristically.assert_called_once_with(problem_text)
+        
+        # Assert that ComplexityAssessor was initialized with the custom detector
+        MockComplexityAssessorClass.assert_called_once_with(
+            llm_client=orchestrator.llm_client,
+            small_model_names=self.assessment_model_names,
+            temperature=self.assessment_temperature,
+            use_heuristic_shortcut=True,
+            heuristic_detector=custom_heuristic_detector
+        )
+
+        # Further assertions to ensure the flow was as expected (e.g., L2T path taken)
+        self.assertEqual(solution.assessment_decision, AssessmentDecision.AOT)
+        self.assertIn("L2T Process Attempted: Yes", summary_str) # Assuming L2TProcessor is mocked to run
+        self.assertIn("Heuristic Shortcut Enabled: True", summary_str)

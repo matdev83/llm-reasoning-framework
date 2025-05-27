@@ -6,20 +6,22 @@ from src.aot_enums import AssessmentDecision
 from src.llm_client import LLMClient
 from src.prompt_generator import PromptGenerator
 from src.heuristic_detector import HeuristicDetector # Import the new class
+from typing import Optional # Import Optional
 
 logger = logging.getLogger(__name__)
 
 class ComplexityAssessor:
-    def __init__(self, llm_client: LLMClient, small_model_names: List[str], temperature: float, use_heuristic_shortcut: bool = True):
+    def __init__(self, llm_client: LLMClient, small_model_names: List[str], temperature: float, use_heuristic_shortcut: bool = True, heuristic_detector: Optional[HeuristicDetector] = None):
         self.llm_client = llm_client
         self.small_model_names = small_model_names
         self.temperature = temperature
         self.use_heuristic_shortcut = use_heuristic_shortcut
+        self.heuristic_detector = heuristic_detector if heuristic_detector is not None else HeuristicDetector()
 
     def assess(self, problem_text: str) -> Tuple[AssessmentDecision, LLMCallStats]:
         # Check heuristic shortcut first
         if self.use_heuristic_shortcut:
-            if HeuristicDetector.should_trigger_complex_process_heuristically(problem_text):
+            if self.heuristic_detector.should_trigger_complex_process_heuristically(problem_text):
                 logging.info("Heuristic shortcut triggered: Problem classified as AOT.")
                 # Return a dummy LLMCallStats as no LLM call was made
                 dummy_stats = LLMCallStats(

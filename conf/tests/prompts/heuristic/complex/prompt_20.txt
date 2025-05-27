@@ -1,0 +1,1 @@
+Solve the traveling salesman problem for 15 cities using a genetic algorithm, detailing the fitness function, crossover, and mutation operations.

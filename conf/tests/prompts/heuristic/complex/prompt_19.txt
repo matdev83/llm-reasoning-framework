@@ -1,0 +1,1 @@
+Explain the detailed workings of a transformer neural network architecture, including self-attention mechanisms, positional encoding, and multi-head attention.

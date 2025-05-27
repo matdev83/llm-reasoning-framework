@@ -1,0 +1,1 @@
+Outline a detailed plan for developing a new programming language, including lexical analysis, parsing, semantic analysis, and code generation.

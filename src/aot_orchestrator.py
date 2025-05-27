@@ -1,13 +1,14 @@
 import time
 import logging
 import io
-from typing import List, Tuple
+from typing import List, Tuple, Optional # Import Optional
 
 from src.aot_enums import AotTriggerMode, AssessmentDecision
 from src.aot_dataclasses import LLMCallStats, AoTRunnerConfig, Solution
 from src.llm_client import LLMClient
 from src.complexity_assessor import ComplexityAssessor
 from src.aot_processor import AoTProcessor
+from src.heuristic_detector import HeuristicDetector # Import HeuristicDetector
 
 class InteractiveAoTOrchestrator:
     def __init__(self,
@@ -18,7 +19,8 @@ class InteractiveAoTOrchestrator:
                  assessment_model_names: List[str],
                  assessment_temperature: float,
                  api_key: str,
-                 use_heuristic_shortcut: bool = True): # New parameter
+                 use_heuristic_shortcut: bool = True, # New parameter
+                 heuristic_detector: Optional[HeuristicDetector] = None): # New parameter
 
         self.trigger_mode = trigger_mode
         self.use_heuristic_shortcut = use_heuristic_shortcut # Store it
@@ -26,13 +28,16 @@ class InteractiveAoTOrchestrator:
         self.direct_oneshot_model_names = direct_oneshot_model_names
         self.direct_oneshot_temperature = direct_oneshot_temperature
         self.llm_client = LLMClient(api_key=api_key)
+        self.heuristic_detector = heuristic_detector # Store the passed detector
+
         self.complexity_assessor = None
         if self.trigger_mode == AotTriggerMode.ASSESS_FIRST:
             self.complexity_assessor = ComplexityAssessor(
                 llm_client=self.llm_client,
                 small_model_names=assessment_model_names,
                 temperature=assessment_temperature,
-                use_heuristic_shortcut=self.use_heuristic_shortcut # Pass the new parameter
+                use_heuristic_shortcut=self.use_heuristic_shortcut, # Pass the new parameter
+                heuristic_detector=self.heuristic_detector # Pass the detector
             )
         self.aot_processor = None
         if self.trigger_mode != AotTriggerMode.NEVER_AOT:
@@ -126,6 +131,7 @@ class InteractiveAoTOrchestrator:
     def _generate_overall_summary(self, solution: Solution) -> str: # New method name and return type
         output_buffer = io.StringIO()
         output_buffer.write("\n" + "="*20 + " OVERALL SUMMARY " + "="*20 + "\n")
+        output_buffer.write(f"Heuristic Shortcut Enabled: {self.use_heuristic_shortcut}\n") # Add this line
         if solution.assessment_stats:
             s = solution.assessment_stats
             output_buffer.write(f"Assessment ({s.model_name}): C={s.completion_tokens}, P={s.prompt_tokens}, Time={s.call_duration_seconds:.2f}s\n")

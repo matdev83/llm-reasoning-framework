@@ -1,7 +1,7 @@
 import time
 import logging
 import io
-from typing import List, Tuple
+from typing import List, Tuple, Optional # Import Optional
 
 from src.aot_dataclasses import LLMCallStats
 from src.aot_enums import AssessmentDecision # Import AssessmentDecision
@@ -10,6 +10,7 @@ from src.llm_client import LLMClient
 from src.l2t_dataclasses import L2TConfig, L2TResult, L2TSolution # Import L2TSolution
 from src.l2t_enums import L2TTriggerMode # Import L2TTriggerMode
 from src.l2t_processor import L2TProcessor
+from src.heuristic_detector import HeuristicDetector # Import HeuristicDetector
 
 # Configure basic logging if no handlers are present
 if not logging.getLogger().hasHandlers():
@@ -26,7 +27,8 @@ class L2TOrchestrator:
                  assessment_model_names: List[str], # New parameter
                  assessment_temperature: float, # New parameter
                  api_key: str,
-                 use_heuristic_shortcut: bool = True): # New parameter
+                 use_heuristic_shortcut: bool = True, # New parameter
+                 heuristic_detector: Optional[HeuristicDetector] = None): # New parameter
 
         self.trigger_mode = trigger_mode
         self.use_heuristic_shortcut = use_heuristic_shortcut
@@ -34,14 +36,16 @@ class L2TOrchestrator:
         self.direct_oneshot_model_names = direct_oneshot_model_names
         self.direct_oneshot_temperature = direct_oneshot_temperature
         self.llm_client = LLMClient(api_key=api_key)
-        
+        self.heuristic_detector = heuristic_detector # Store the passed detector
+
         self.complexity_assessor = None
         if self.trigger_mode == L2TTriggerMode.ASSESS_FIRST:
             self.complexity_assessor = ComplexityAssessor(
                 llm_client=self.llm_client,
                 small_model_names=assessment_model_names,
                 temperature=assessment_temperature,
-                use_heuristic_shortcut=self.use_heuristic_shortcut
+                use_heuristic_shortcut=self.use_heuristic_shortcut,
+                heuristic_detector=self.heuristic_detector # Pass the detector
             )
         
         self.l2t_processor = None

@@ -1,0 +1,1 @@
+Refactor a large, monolithic legacy codebase into a modular, testable architecture using modern design patterns and principles.

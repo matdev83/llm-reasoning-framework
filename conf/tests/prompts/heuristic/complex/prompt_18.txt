@@ -1,0 +1,1 @@
+Write a comprehensive technical whitepaper detailing the design and implementation of a novel decentralized identity management system based on zero-knowledge proofs.

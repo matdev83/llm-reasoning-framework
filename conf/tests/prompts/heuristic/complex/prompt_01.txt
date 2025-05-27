@@ -1,0 +1,1 @@
+Design a scalable microservices architecture for an e-commerce platform that handles millions of concurrent users and integrates with multiple payment gateways.
