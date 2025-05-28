@@ -25,9 +25,8 @@ class TestLLMAccountingIntegration(unittest.TestCase):
         if os.path.exists(DB_NAME):
             os.remove(DB_NAME)
         
-        # Connect to the database for audit logging via audit_logger
-        if self.llm_client.audit_logger:
-            self.llm_client.audit_logger.connect()
+        # The AuditLogger now manages its connection internally via the backend.
+        # Explicit connect() call is no longer needed.
 
         # Patch time.monotonic to control call_duration_seconds
         self.mock_monotonic_patch = patch('time.monotonic')
@@ -35,9 +34,8 @@ class TestLLMAccountingIntegration(unittest.TestCase):
         self.mock_monotonic.side_effect = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0] # Extended for failover test
 
     def tearDown(self):
-        # Close the database connection via audit_logger
-        if self.llm_client.audit_logger:
-            self.llm_client.audit_logger.close()
+        # The AuditLogger now manages its connection internally via the backend.
+        # Explicit close() call is no longer needed.
         # Clean up the database file after each test
         if os.path.exists(DB_NAME):
             os.remove(DB_NAME)

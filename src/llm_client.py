@@ -1,10 +1,11 @@
 import time
 import requests
 import logging
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, cast
 from llm_accounting import LLMAccounting
 from llm_accounting.audit_log import AuditLogger
 from llm_accounting.models.limits import LimitScope, LimitType, TimeInterval
+from llm_accounting.backends.sqlite import SQLiteBackend
 
 from src.aot_dataclasses import LLMCallStats
 from src.aot_constants import OPENROUTER_API_URL, HTTP_REFERER, APP_TITLE
@@ -22,10 +23,11 @@ class LLMClient:
             "X-Title": app_title,
             "Content-Type": "application/json"
         }
-        self.accounting = LLMAccounting()
+        sqlite_backend_instance = SQLiteBackend(db_path="data/audit_log.sqlite")
+        self.accounting = LLMAccounting(backend=sqlite_backend_instance)
         self.enable_rate_limiting = enable_rate_limiting
         self.enable_audit_logging = enable_audit_logging
-        self.audit_logger = AuditLogger() if enable_audit_logging else None
+        self.audit_logger = AuditLogger(backend=sqlite_backend_instance) if enable_audit_logging else None
 
     def call(self, prompt: str, models: List[str], temperature: float) -> Tuple[str, LLMCallStats]:
         if not models:
@@ -143,6 +145,15 @@ class LLMClient:
                         user_name="api_user",
                         model=model_name,
                         prompt_text=prompt
+                    )
+                    # Explicitly cast data to dict to satisfy Pylance
+                    response_data = cast(dict, data) 
+                    self.audit_logger.log_response(
+                        app_name="LLMClient",
+                        user_name="api_user",
+                        model=model_name,
+                        response_text=content,
+                        remote_completion_id=response_data.get("id")
                     )
 
                 if content.startswith("Error:"): 

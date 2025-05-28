@@ -47,5 +47,7 @@ coverage.xml
 .idea/
 
 .clineignore
+.clinerules/
 src/.bak/
 data/accounting.sqlite
+data/audit_log.sqlite
