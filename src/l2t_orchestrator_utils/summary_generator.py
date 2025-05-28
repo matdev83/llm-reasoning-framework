@@ -75,8 +75,8 @@ class L2TSummaryGenerator:
 
         if solution.assessment_stats:
             s = solution.assessment_stats
-            decision_val = getattr(s, 'assessment_decision', solution.assessment_decision) # Fallback to solution's decision
-            decision_for_summary = getattr(s, 'assessment_decision_for_summary', decision_val.value if decision_val else 'N/A')
+            # Use the stored assessment_decision directly from the solution object
+            decision_for_summary = solution.assessment_decision.value if solution.assessment_decision else 'N/A'
             time_str = f"{s.call_duration_seconds:.2f}s" if s.call_duration_seconds is not None else "N/A"
             output_buffer.write(f"Assessment Phase ({s.model_name if s else 'N/A'}): Decision='{decision_for_summary}', C={s.completion_tokens if s else 'N/A'}, P={s.prompt_tokens if s else 'N/A'}, Time={time_str}\n")
         

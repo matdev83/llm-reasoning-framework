@@ -138,8 +138,8 @@ class TestL2TOrchestrator(unittest.TestCase):
 
     def test_assess_first_leads_to_l2t(self):
         self.mock_assessor_instance.assess.return_value = (
-            AssessmentDecision.AOT, # AOT decision means use complex process (L2T here)
-            LLMCallStats(model_name="assessor", completion_tokens=1, prompt_tokens=1, call_duration_seconds=0.1) # Removed assessment_decision
+            AssessmentDecision.ADVANCED_REASONING, # ADVANCED_REASONING decision means use complex process (L2T here)
+            LLMCallStats(model_name="assessor", completion_tokens=1, prompt_tokens=1, call_duration_seconds=0.1)
         )
         
         orchestrator = self._create_orchestrator(L2TTriggerMode.ASSESS_FIRST)
@@ -158,8 +158,8 @@ class TestL2TOrchestrator(unittest.TestCase):
 
     def test_assess_first_leads_to_oneshot(self):
         self.mock_assessor_instance.assess.return_value = (
-            AssessmentDecision.ONESHOT, 
-            LLMCallStats(model_name="assessor", completion_tokens=1, prompt_tokens=1, call_duration_seconds=0.1) # Removed assessment_decision
+            AssessmentDecision.ONE_SHOT, 
+            LLMCallStats(model_name="assessor", completion_tokens=1, prompt_tokens=1, call_duration_seconds=0.1)
         )
 
         orchestrator = self._create_orchestrator(L2TTriggerMode.ASSESS_FIRST)

@@ -9,6 +9,6 @@ class AotTriggerMode(Enum):
         return self.value
 
 class AssessmentDecision(Enum):
-    ONESHOT = "ONESHOT"
-    AOT = "AOT"
+    ONE_SHOT = "ONE_SHOT"
+    ADVANCED_REASONING = "ADVANCED_REASONING"
     ERROR = "ERROR"

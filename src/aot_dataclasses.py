@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple, Dict
+from src.aot_enums import AssessmentDecision
 
 from src.aot_constants import (
     DEFAULT_MAIN_MODEL_NAMES, DEFAULT_MAX_STEPS, DEFAULT_MAX_TIME_SECONDS,
@@ -49,6 +50,7 @@ class Solution:
     final_answer: Optional[str] = None
     reasoning_trace: List[str] = field(default_factory=list)
     assessment_stats: Optional[LLMCallStats] = None
+    assessment_decision: Optional[AssessmentDecision] = None # Add this line
     main_call_stats: Optional[LLMCallStats] = None
     aot_result: Optional[AoTResult] = None
     fallback_call_stats: Optional[LLMCallStats] = None

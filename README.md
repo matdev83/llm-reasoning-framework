@@ -1,31 +1,31 @@
-# LLM AOT Process
+# Modular LLM Reasoning Framework
 
-This project is designed for **Answer-then-Think (AoT) processing with Large Language Models (LLMs)**. It provides a flexible framework to orchestrate complex reasoning tasks by breaking them down into iterative steps, managing LLM interactions, and dynamically adapting based on problem complexity and resource constraints.
+This project provides a flexible and modular framework for orchestrating diverse Large Language Model (LLM) reasoning strategies. It enables the breakdown of complex tasks into manageable steps, manages LLM interactions, and dynamically adapts problem-solving approaches based on complexity and resource constraints.
 
-AoT (Answer-then-Think) is a prompting strategy that reduces hallucinations in LLMs by first providing an answer and then explaining the reasoning. This approach is useful for complex problems and can reveal the model's initial instincts versus its rationalizations. For more details, see [Order Matters in Hallucination](https://arxiv.org/html/2408.05093v1) paper by Zikai Xie.
+This framework is designed to support various iterative and adaptive reasoning patterns, including Algorithm of Thoughts (AoT) and Learn to Think (L2T). AoT, for instance, is a prompting strategy that aims to reduce hallucinations by first providing an answer and then explaining the reasoning. This approach can be particularly useful for complex problems, revealing the model's initial instincts versus its rationalizations. For more details on AoT, refer to the [Order Matters in Hallucination](https://arxiv.org/html/2408.05093v1) paper by Zikai Xie. L2T, on the other hand, focuses on generating and classifying thoughts to build a reasoning graph.
 
 ## Key Features & Flows
 
-The core of this project revolves around the `InteractiveAoTOrchestrator`, which manages the overall problem-solving flow based on a chosen trigger mode:
+The core of this project revolves around orchestrators (e.g., `InteractiveAoTOrchestrator`, `L2TOrchestrator`), which manage the overall problem-solving flow based on a chosen strategy or trigger mode:
 
-*   **`NEVER_AOT` (One-Shot)**: The problem is sent directly to the main LLM for a single, immediate answer. This is suitable for simple problems that do not require iterative reasoning.
-*   **`ALWAYS_AOT` (Forced AoT)**: The system always initiates the iterative AoT reasoning process. This is ideal for complex problems where a step-by-step approach is known to be beneficial. If the AoT process fails (e.g., hits limits or parsing issues), it can fall back to a one-shot call.
-*   **`ASSESS_FIRST` (Adaptive AoT)**: A smaller, faster LLM (the `ComplexityAssessor`) first evaluates the problem's complexity. This mode also incorporates a **local heuristic analysis** to potentially bypass the LLM call for assessment.
+*   **`NEVER_REASONING` (One-Shot Processing)**: The problem is sent directly to the main LLM for a single, immediate answer. This is suitable for simple problems that do not require multi-step reasoning.
+*   **`ALWAYS_REASONING` (Forced Iterative Reasoning)**: The system always initiates an iterative reasoning process (e.g., AoT, L2T). This is ideal for complex problems where a step-by-step approach is known to be beneficial. If the iterative process fails (e.g., hits limits or parsing issues), it can fall back to a one-shot call.
+*   **`ASSESS_FIRST` (Adaptive Reasoning)**: A smaller, faster LLM (the `ComplexityAssessor`) first evaluates the problem's complexity to determine the most suitable approach (one-shot or an advanced reasoning process). This mode also incorporates a **local heuristic analysis** to potentially bypass the LLM call for assessment.
 
 ### Local Heuristic Analysis
 
-When `ASSESS_FIRST` mode is active, a local, deterministic heuristic function (`should_use_aot_heuristically` in `complexity_assessor.py`) is used by default to quickly identify problems that are *highly likely* to require an AoT process. If this heuristic triggers, the system immediately proceeds with AoT withoutmaking an LLM call for assessment, saving time and tokens.
+When `ASSESS_FIRST` mode is active, a local, deterministic heuristic function (`should_trigger_complex_process_heuristically` in `complexity_assessor.py`) is used by default to quickly identify problems that are *highly likely* to require an advanced reasoning process. If this heuristic triggers, the system immediately proceeds with the advanced reasoning process (e.g., AoT, L2T) without making an LLM call for assessment, saving time and tokens.
 
 This heuristic checks for specific keywords and patterns in the problem prompt that strongly indicate a need for detailed, multi-step reasoning (e.g., "design architecture for", "explain in great detail", "step-by-step", "prove that").
 
 To **disable** this heuristic and always use the assessment LLM for complexity evaluation (even for problems that might trigger the heuristic), use the `--disable-heuristic` CLI flag.
 
-### AoT Reasoning Process (`AoTProcessor`)
+### Iterative Reasoning Process (e.g., `AoTProcessor`, `L2TProcessor`)
 
-When the AoT process is triggered, the `AoTProcessor` takes over. It iteratively:
-1.  Constructs a prompt using `PromptGenerator`, incorporating the problem statement and the history of previous reasoning steps.
+When an iterative reasoning process is triggered (e.g., the AoT or L2T process), a dedicated processor like `AoTProcessor` or `L2TProcessor` takes over. It iteratively:
+1.  Constructs a prompt using `PromptGenerator` (or `L2TPromptGenerator`), incorporating the problem statement and the history of previous reasoning steps.
 2.  Sends the prompt to the main LLM via `LLMClient`.
-3.  Parses the LLM's response using `ResponseParser` to extract the current reasoning step, intermediate answers, and potential final answers.
+3.  Parses the LLM's response using `ResponseParser` (or `L2TResponseParser`) to extract the current reasoning step, intermediate answers, and potential final answers.
 4.  Dynamically manages resource limits:
     *   **Max Steps**: Stops after a configured number of reasoning steps.
     *   **Max Reasoning Tokens**: Halts if the cumulative completion tokens for reasoning exceed a specified budget.
@@ -53,14 +53,14 @@ $env:OPENROUTER_API_KEY="your_api_key_here" # On Windows (PowerShell)
 # Example: Run with default settings, assessing first (heuristic enabled by default)
 python -m src.cli_runner --problem "Explain the concept of quantum entanglement in simple terms."
 
-# Example: Force AoT for a problem from a file
-python -m src.cli_runner --aot-mode always --problem-filename conf/example_user_prompts/problem1.txt --max-steps 20 --max-time 120
+# Example: Force an advanced reasoning process (e.g., AoT) for a problem from a file
+python -m src.cli_runner --reasoning-mode always-reasoning --problem-filename conf/example_user_prompts/problem1.txt --max-steps 20 --max-time 120
 
 # Example: Run a direct one-shot call with specific models
-python -m src.cli_runner --aot-mode never --problem "What is the capital of France?" --main-models "gpt-3.5-turbo"
+python -m src.cli_runner --reasoning-mode never-reasoning --problem "What is the capital of France?" --main-models "gpt-3.5-turbo"
 
 # Example: Disable the heuristic, forcing LLM assessment
-python -m src.cli_runner --aot-mode assess --problem "Design a scalable microservices architecture." --disable-heuristic
+python -m src.cli_runner --reasoning-mode assess-first --problem "Design a scalable microservices architecture." --disable-heuristic
 ```
 
 ### CLI Parameters
@@ -69,27 +69,27 @@ Here are the available command-line arguments:
 
 *   **`--problem` / `-p`**: (Mutually exclusive with `--problem-filename`) The problem or question to solve.
 *   **`--problem-filename`**: (Mutually exclusive with `--problem`) Path to a file containing the problem.
-*   **`--aot-mode`**: AoT trigger mode.
-    *   Choices: `always`, `assess`, `never`
-    *   Default: `assess` (`ASSESS_FIRST`)
-    *   `always`: Force AoT process.
-    *   `assess`: Use a small LLM to decide if AoT or ONESHOT.
-    *   `never`: Force ONESHOT (direct answer).
-*   **`--main-models`**: Space-separated list of main LLM(s) for AoT/ONESHOT.
+*   **`--reasoning-mode`**: Reasoning strategy trigger mode.
+    *   Choices: `always-reasoning`, `assess-first`, `never-reasoning`
+    *   Default: `assess-first` (`ASSESS_FIRST`)
+    *   `always-reasoning`: Force an iterative reasoning process (e.g., AoT, L2T).
+    *   `assess-first`: Use a small LLM to decide between one-shot or an advanced reasoning process.
+    *   `never-reasoning`: Force one-shot processing (direct answer).
+*   **`--main-models`**: Space-separated list of main LLM(s) for one-shot or advanced reasoning processes.
     *   Default: `tngtech/deepseek-r1t-chimera:free deepseek/deepseek-prover-v2:free`
 *   **`--main-temp`**: Temperature for main LLM(s).
     *   Default: `0.2`
-*   **`--assess-models`**: Space-separated list of small LLM(s) for assessment (used in `assess` mode).
+*   **`--assess-models`**: Space-separated list of small LLM(s) for assessment (used in `assess-first` mode).
     *   Default: `meta-llama/llama-3.3-8b-instruct:free nousresearch/hermes-2-pro-llama-3-8b:free`
 *   **`--assess-temp`**: Temperature for assessment LLM(s).
     *   Default: `0.1`
-*   **`--max-steps`**: Max AoT reasoning steps.
+*   **`--max-steps`**: Max steps for iterative reasoning processes (e.g., AoT, L2T).
     *   Default: `12`
-*   **`--max-reasoning-tokens`**: Max completion tokens for AoT reasoning phase. Enforced dynamically.
+*   **`--max-reasoning-tokens`**: Max completion tokens for iterative reasoning phases. Enforced dynamically.
     *   Default: `None` (no limit)
-*   **`--max-time`**: Overall max time for an AoT run (seconds), also used for predictive step limiting.
+*   **`--max-time`**: Overall max time for an iterative reasoning run (seconds), also used for predictive step limiting.
     *   Default: `60` seconds
-*   **`--no-progress-limit`**: Stop AoT if no progress (same "current answer") for this many steps.
+*   **`--no-progress-limit`**: Stop iterative reasoning if no progress (same "current answer") for this many steps.
     *   Default: `2`
 *   **`--pass-remaining-steps-pct`**: Percentage (0-100) of original `max_steps` at which to inform LLM about dynamically remaining steps.
     *   Choices: `0` to `100`
@@ -100,11 +100,14 @@ Here are the available command-line arguments:
 
 The `conf/` directory contains important configuration and example files:
 
-*   **`conf/prompts/`**: This directory holds the text files that define the various prompt templates used by the LLMs throughout the AoT process. These include:
+*   **`conf/prompts/`**: This directory holds the text files that define the various prompt templates used by the LLMs throughout the reasoning processes (AoT, L2T, etc.). These include:
     *   `aot_intro.txt`: Initial prompt for the AoT reasoning steps.
-    *   `aot_final_answer.txt`: Prompt used to synthesize the final answer from the reasoning trace.
+    *   `aot_final_answer.txt`: Prompt used to synthesize the final answer from the AoT reasoning trace.
     *   `assessment_system_prompt.txt`: System prompt for the complexity assessment LLM.
     *   `assessment_user_prompt.txt`: User prompt for the complexity assessment LLM.
+    *   `l2t_initial.txt`: Initial prompt for the L2T process.
+    *   `l2t_node_classification.txt`: Prompt for classifying nodes in the L2T graph.
+    *   `l2t_thought_generation.txt`: Prompt for generating new thoughts/nodes in the L2T graph.
 *   **`conf/example_user_prompts/`**: Contains example problem statements (`problem1.txt`, `problem2.txt`) that can be used with the `--problem-filename` CLI argument.
 
 ## Development

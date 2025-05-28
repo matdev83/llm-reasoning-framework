@@ -222,16 +222,16 @@ class L2TOrchestrator:
                 orchestrator_solution.assessment_stats = assessment_stats
                 orchestrator_solution.assessment_decision = assessment_decision
 
-                if assessment_decision == AssessmentDecision.ONESHOT:
-                    logger.info("Assessment: ONESHOT. Orchestrator performing direct one-shot call.")
+                if assessment_decision == AssessmentDecision.ONE_SHOT:
+                    logger.info("Assessment: ONE_SHOT. Orchestrator performing direct one-shot call.")
                     final_answer, oneshot_stats = self.oneshot_executor.run_direct_oneshot(problem_text)
                     orchestrator_solution.final_answer = final_answer
                     orchestrator_solution.main_call_stats = oneshot_stats
-                elif assessment_decision == AssessmentDecision.AOT: # AOT here means L2T path
-                    logger.info("Assessment: L2T. Orchestrator delegating to L2TProcess.")
+                elif assessment_decision == AssessmentDecision.ADVANCED_REASONING: # ADVANCED_REASONING here means L2T path
+                    logger.info("Assessment: ADVANCED_REASONING. Orchestrator delegating to L2TProcess.")
                     if not self.l2t_process_instance:
-                        logger.critical("L2TProcess not initialized for ASSESS_FIRST mode (L2T path).")
-                        orchestrator_solution.final_answer = "Error: L2TProcess not initialized for L2T path."
+                        logger.critical("L2TProcess not initialized for ASSESS_FIRST mode (ADVANCED_REASONING path).")
+                        orchestrator_solution.final_answer = "Error: L2TProcess not initialized for ADVANCED_REASONING path."
                         orchestrator_solution.l2t_result = L2TResult(succeeded=False, error_message=orchestrator_solution.final_answer)
                     else:
                         self.l2t_process_instance.execute(problem_description=problem_text, model_name=model_name_for_l2t)
@@ -250,13 +250,11 @@ class L2TOrchestrator:
                         else: # Should not happen
                              orchestrator_solution.final_answer = "Error: L2TProcess (post-assessment) returned no solution object."
                              orchestrator_solution.l2t_result = L2TResult(succeeded=False, error_message=orchestrator_solution.final_answer)
-                             logger.error("L2TProcess returned None for L2TSolution in ASSESS_FIRST (L2T path) mode.")
+                             logger.error("L2TProcess returned None for L2TSolution in ASSESS_FIRST (ADVANCED_REASONING path) mode.")
 
                 else: # AssessmentDecision.ERROR
                     logger.error("Complexity assessment failed. Orchestrator attempting one-shot call as a last resort.")
-                    # Store this specific outcome for summary
-                    if orchestrator_solution.assessment_stats:
-                        orchestrator_solution.assessment_stats.assessment_decision_for_summary = "ERROR_FALLBACK" # Custom field
+                    # No longer setting assessment_decision_for_summary on LLMCallStats
                     orchestrator_solution.l2t_failed_and_fell_back = True # Indicate fallback due to assessment error
                     fallback_answer, fallback_stats = self.oneshot_executor.run_direct_oneshot(problem_text, is_fallback=True)
                     orchestrator_solution.final_answer = fallback_answer

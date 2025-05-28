@@ -146,8 +146,8 @@ class TestInteractiveAoTOrchestrator(unittest.TestCase):
     def test_assess_first_leads_to_aot(self):
         # Configure the mock assessor instance (which is self.MockComplexityAssessorClass.return_value)
         self.mock_assessor_instance.assess.return_value = (
-            AssessmentDecision.AOT, 
-            LLMCallStats(model_name="assessor", completion_tokens=1, prompt_tokens=1, call_duration_seconds=0.1) # Removed assessment_decision
+            AssessmentDecision.ADVANCED_REASONING, 
+            LLMCallStats(model_name="assessor", completion_tokens=1, prompt_tokens=1, call_duration_seconds=0.1)
         )
         
         orchestrator = self._create_orchestrator(AotTriggerMode.ASSESS_FIRST)
@@ -172,8 +172,8 @@ class TestInteractiveAoTOrchestrator(unittest.TestCase):
 
     def test_assess_first_leads_to_oneshot(self):
         self.mock_assessor_instance.assess.return_value = (
-            AssessmentDecision.ONESHOT, 
-            LLMCallStats(model_name="assessor", completion_tokens=1, prompt_tokens=1, call_duration_seconds=0.1) # Removed assessment_decision
+            AssessmentDecision.ONE_SHOT, 
+            LLMCallStats(model_name="assessor", completion_tokens=1, prompt_tokens=1, call_duration_seconds=0.1)
         )
 
         orchestrator = self._create_orchestrator(AotTriggerMode.ASSESS_FIRST)
@@ -197,47 +197,48 @@ class TestInteractiveAoTOrchestrator(unittest.TestCase):
 
     def test_assess_first_with_heuristic_detector_leads_to_aot(self):
         custom_heuristic_detector = MockHeuristicDetector()
-        custom_heuristic_detector.should_trigger_complex_process_heuristically.return_value = True
         
-        # Configure the mock assessor instance to use this heuristic detector behaviour
-        # The orchestrator will pass the heuristic_detector to the ComplexityAssessor constructor.
-        # Our mock_assessor_instance (self.MockComplexityAssessorClass.return_value) needs to simulate this.
-        # We can store the detector on the mock_assessor_instance when it's "created" by the orchestrator.
-        
-        def assess_side_effect(problem_text_param):
-            # This simulates the ComplexityAssessor's internal logic
-            # Access the heuristic_detector that would have been set on it by the orchestrator
-            use_heuristic = self.mock_assessor_instance.use_heuristic_shortcut_param # Param passed to constructor
-            detector_on_mock = self.mock_assessor_instance.heuristic_detector_param # Param passed to constructor
+        # Use patch.object to explicitly mock the method and capture the mock object
+        with patch.object(custom_heuristic_detector, 'should_trigger_complex_process_heuristically', return_value=True) as mock_should_trigger_complex_process_heuristically:
+            # Configure the mock assessor instance to use this heuristic detector behaviour
+            # The orchestrator will pass the heuristic_detector to the ComplexityAssessor constructor.
+            # Our mock_assessor_instance (self.MockComplexityAssessorClass.return_value) needs to simulate this.
+            # We can store the detector on the mock_assessor_instance when it's "created" by the orchestrator.
             
-            if use_heuristic and detector_on_mock and \
-               detector_on_mock.should_trigger_complex_process_heuristically(problem_text_param):
-                return AssessmentDecision.AOT, LLMCallStats(model_name="heuristic_path") # Removed assessment_decision
-            return AssessmentDecision.ONESHOT, LLMCallStats(model_name="assess-model-direct") # Removed assessment_decision
-        
-        self.mock_assessor_instance.assess.side_effect = assess_side_effect
-        
-        # This function will be called when ComplexityAssessor is instantiated by the orchestrator.
-        # We use it to capture the heuristic_detector passed by the orchestrator to the mock.
-        def capture_assessor_init_args(*args, **kwargs):
-            self.mock_assessor_instance.use_heuristic_shortcut_param = kwargs.get('use_heuristic_shortcut')
-            self.mock_assessor_instance.heuristic_detector_param = kwargs.get('heuristic_detector')
-            return self.mock_assessor_instance # Return the configured instance
+            def assess_side_effect(problem_text_param):
+                # This simulates the ComplexityAssessor's internal logic
+                # Access the heuristic_detector that would have been set on it by the orchestrator
+                use_heuristic = self.mock_assessor_instance.use_heuristic_shortcut_param # Param passed to constructor
+                detector_on_mock = self.mock_assessor_instance.heuristic_detector_param # Param passed to constructor
+                
+                if use_heuristic and detector_on_mock and \
+                   detector_on_mock.should_trigger_complex_process_heuristically(problem_text_param):
+                    return AssessmentDecision.ADVANCED_REASONING, LLMCallStats(model_name="heuristic_path")
+                return AssessmentDecision.ONE_SHOT, LLMCallStats(model_name="assess-model-direct")
+            
+            self.mock_assessor_instance.assess.side_effect = assess_side_effect
+            
+            # This function will be called when ComplexityAssessor is instantiated by the orchestrator.
+            # We use it to capture the heuristic_detector passed by the orchestrator to the mock.
+            def capture_assessor_init_args(*args, **kwargs):
+                self.mock_assessor_instance.use_heuristic_shortcut_param = kwargs.get('use_heuristic_shortcut')
+                self.mock_assessor_instance.heuristic_detector_param = kwargs.get('heuristic_detector')
+                return self.mock_assessor_instance # Return the configured instance
 
-        self.MockComplexityAssessorClass.side_effect = capture_assessor_init_args
-        
-        orchestrator = self._create_orchestrator(
-            trigger_mode=AotTriggerMode.ASSESS_FIRST,
-            use_heuristic_shortcut=True,
-            heuristic_detector=custom_heuristic_detector
-        )
-        
-        solution, summary = orchestrator.solve(self.problem_text)
+            self.MockComplexityAssessorClass.side_effect = capture_assessor_init_args
+            
+            orchestrator = self._create_orchestrator(
+                trigger_mode=AotTriggerMode.ASSESS_FIRST,
+                use_heuristic_shortcut=True,
+                heuristic_detector=custom_heuristic_detector
+            )
+            
+            solution, summary = orchestrator.solve(self.problem_text)
 
-        custom_heuristic_detector.should_trigger_complex_process_heuristically.assert_called_once_with(self.problem_text)
-        self.mock_assessor_instance.assess.assert_called_once_with(self.problem_text)
-        
-        self.MockAoTProcess.assert_called_once() 
+            mock_should_trigger_complex_process_heuristically.assert_called_once_with(self.problem_text)
+            self.mock_assessor_instance.assess.assert_called_once_with(self.problem_text)
+            
+            self.MockAoTProcess.assert_called_once() 
         self.mock_aot_process_instance.execute.assert_called_once_with(problem_description=self.problem_text, model_name=ANY)
         self.mock_aot_process_instance.get_result.assert_called_once()
         

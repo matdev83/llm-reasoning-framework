@@ -232,18 +232,19 @@ class InteractiveAoTOrchestrator: # Renamed from AoTOrchestrator for clarity
                 orchestrator_solution.final_answer = "Error: ComplexityAssessor not initialized."
             else:
                 assessment_decision, assessment_stats = self.complexity_assessor.assess(problem_text)
-                orchestrator_solution.assessment_stats = assessment_stats 
+                orchestrator_solution.assessment_stats = assessment_stats
+                orchestrator_solution.assessment_decision = assessment_decision # Store the decision
 
-                if assessment_decision == AssessmentDecision.ONESHOT:
-                    logging.info("Assessment: ONESHOT. Orchestrator performing direct one-shot call.")
+                if assessment_decision == AssessmentDecision.ONE_SHOT:
+                    logging.info("Assessment: ONE_SHOT. Orchestrator performing direct one-shot call.")
                     final_answer, oneshot_stats = self._run_direct_oneshot(problem_text)
                     orchestrator_solution.final_answer = final_answer
                     orchestrator_solution.main_call_stats = oneshot_stats
-                elif assessment_decision == AssessmentDecision.AOT:
-                    logging.info("Assessment: AOT. Orchestrator delegating to AoTProcess.")
+                elif assessment_decision == AssessmentDecision.ADVANCED_REASONING:
+                    logging.info("Assessment: ADVANCED_REASONING. Orchestrator delegating to AoTProcess.")
                     if not self.aot_process_instance:
-                        logging.critical("AoTProcess not initialized for ASSESS_FIRST mode (AOT path).")
-                        orchestrator_solution.final_answer = "Error: AoTProcess not initialized for AOT path."
+                        logging.critical("AoTProcess not initialized for ASSESS_FIRST mode (ADVANCED_REASONING path).")
+                        orchestrator_solution.final_answer = "Error: AoTProcess not initialized for ADVANCED_REASONING path."
                     else:
                         self.aot_process_instance.execute(problem_description=problem_text, model_name=model_name_for_aot)
                         aot_solution_obj, aot_process_execution_summary = self.aot_process_instance.get_result()
@@ -259,11 +260,10 @@ class InteractiveAoTOrchestrator: # Renamed from AoTOrchestrator for clarity
                             # orchestrator_solution.add_llm_call_stats_from_solution(aot_solution_obj) # Removed
                         else: # Should ideally not happen
                              orchestrator_solution.final_answer = "Error: AoTProcess (post-assessment) returned no solution object."
-                             logging.error("AoTProcess returned None for solution object in ASSESS_FIRST (AOT path) mode.")
+                             logging.error("AoTProcess returned None for solution object in ASSESS_FIRST (ADVANCED_REASONING path) mode.")
                 else:  # AssessmentDecision.ERROR
                     logging.error("Complexity assessment failed. Orchestrator attempting one-shot call as a last resort.")
-                    if orchestrator_solution.assessment_stats: 
-                         orchestrator_solution.assessment_stats.assessment_decision_for_summary = "ERROR_FALLBACK"
+                    # No longer setting assessment_decision_for_summary on LLMCallStats
                     
                     fallback_answer, fallback_stats = self._run_direct_oneshot(problem_text, is_fallback=True)
                     orchestrator_solution.final_answer = fallback_answer
@@ -281,10 +281,10 @@ class InteractiveAoTOrchestrator: # Renamed from AoTOrchestrator for clarity
         output_buffer.write(f"Orchestrator Trigger Mode: {self.trigger_mode.value}\n")
         output_buffer.write(f"Heuristic Shortcut Option for Assessor: {self.use_heuristic_shortcut}\n")
         
-        if solution.assessment_stats:
+        if solution.assessment_stats: # Still show stats if available
             s = solution.assessment_stats
-            decision_val = getattr(s, 'assessment_decision', None) 
-            decision_for_summary = getattr(s, 'assessment_decision_for_summary', decision_val.value if decision_val else 'N/A')
+            # Use the stored assessment_decision directly from the solution object
+            decision_for_summary = solution.assessment_decision.value if solution.assessment_decision else 'N/A'
             # Ensure time is formatted, handling None case for safety although it should be populated
             time_str = f"{s.call_duration_seconds:.2f}s" if s.call_duration_seconds is not None else "N/A"
             output_buffer.write(f"Assessment Phase ({s.model_name if s else 'N/A'}): Decision='{decision_for_summary}', C={s.completion_tokens if s else 'N/A'}, P={s.prompt_tokens if s else 'N/A'}, Time={time_str}\n")

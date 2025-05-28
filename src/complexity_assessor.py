@@ -22,7 +22,7 @@ class ComplexityAssessor:
         # Check heuristic shortcut first
         if self.use_heuristic_shortcut:
             if self.heuristic_detector.should_trigger_complex_process_heuristically(problem_text):
-                logging.info("Heuristic shortcut triggered: Problem classified as AOT.")
+                logging.info("Heuristic shortcut triggered: Problem classified as ADVANCED_REASONING.")
                 # Return a dummy LLMCallStats as no LLM call was made
                 dummy_stats = LLMCallStats(
                     model_name="heuristic_shortcut",
@@ -30,7 +30,7 @@ class ComplexityAssessor:
                     completion_tokens=0,
                     call_duration_seconds=0.0
                 )
-                return AssessmentDecision.AOT, dummy_stats
+                return AssessmentDecision.ADVANCED_REASONING, dummy_stats
 
         logging.info(f"--- Initial Complexity Assessment using models: {', '.join(self.small_model_names)} ---")
         assessment_prompt = PromptGenerator.construct_assessment_prompt(problem_text)
@@ -40,19 +40,19 @@ class ComplexityAssessor:
         logging.debug(f"Assessment model ({stats.model_name}) raw response: '{response_content.strip()}'")
         logging.info(f"Assessment call: {stats.model_name}, Duration: {stats.call_duration_seconds:.2f}s, Tokens (C:{stats.completion_tokens}, P:{stats.prompt_tokens})")
         
-        decision = AssessmentDecision.AOT # Default decision
+        decision = AssessmentDecision.ADVANCED_REASONING # Default decision
         if response_content.startswith("Error:"):
-            logging.warning(f"Assessment model call failed. Defaulting to AOT. Error: {response_content}")
+            logging.warning(f"Assessment model call failed. Defaulting to ADVANCED_REASONING. Error: {response_content}")
             decision = AssessmentDecision.ERROR # Specific error state
         else:
             cleaned_response = response_content.strip().upper()
-            if cleaned_response == AssessmentDecision.ONESHOT.value:
-                decision = AssessmentDecision.ONESHOT
-                logging.info("Assessment: Problem classified as ONESHOT.")
-            elif cleaned_response == AssessmentDecision.AOT.value:
-                decision = AssessmentDecision.AOT
-                logging.info("Assessment: Problem classified as AOT.")
+            if cleaned_response == AssessmentDecision.ONE_SHOT.value:
+                decision = AssessmentDecision.ONE_SHOT
+                logging.info("Assessment: Problem classified as ONE_SHOT.")
+            elif cleaned_response == AssessmentDecision.ADVANCED_REASONING.value:
+                decision = AssessmentDecision.ADVANCED_REASONING
+                logging.info("Assessment: Problem classified as ADVANCED_REASONING.")
             else:
-                logging.warning(f"Assessment model output ('{cleaned_response}') was not '{AssessmentDecision.ONESHOT.value}' or '{AssessmentDecision.AOT.value}'. Defaulting to AOT.")
-                # decision remains AOT (the default)
+                logging.warning(f"Assessment model output ('{cleaned_response}') was not '{AssessmentDecision.ONE_SHOT.value}' or '{AssessmentDecision.ADVANCED_REASONING.value}'. Defaulting to ADVANCED_REASONING.")
+                # decision remains ADVANCED_REASONING (the default)
         return decision, stats
