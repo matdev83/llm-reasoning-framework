@@ -6,6 +6,7 @@ from src.l2t_dataclasses import L2TConfig, L2TResult, L2TGraph, L2TSolution
 from src.l2t_enums import L2TTriggerMode
 from src.aot_dataclasses import LLMCallStats
 from src.aot_enums import AssessmentDecision # Import AssessmentDecision
+from src.l2t_orchestrator_utils.oneshot_executor import OneShotExecutor # Import OneShotExecutor
 
 # Suppress logging during tests
 import logging
@@ -16,10 +17,13 @@ from typing import Optional # Import Optional
 
 # Mock for L2TProcessor to be used by the orchestrator tests
 class MockL2TProcessor:
-    def __init__(self, llm_client, config):
-        self.llm_client = llm_client
+    def __init__(self, api_key, config, enable_rate_limiting=True, enable_audit_logging=True): # Updated signature
+        self.api_key = api_key
         self.config = config
+        self.enable_rate_limiting = enable_rate_limiting
+        self.enable_audit_logging = enable_audit_logging
         self.run = MagicMock()
+        self.llm_client = MagicMock() # Mock the internal llm_client
 
 # Mock for ComplexityAssessor
 class MockComplexityAssessor:
@@ -81,7 +85,7 @@ class TestL2TOrchestrator(unittest.TestCase):
             error_message=None,
         )
         
-        mock_processor_instance = MockL2TProcessor(llm_client=MagicMock(), config=self.l2t_config)
+        mock_processor_instance = MockL2TProcessor(api_key=self.api_key, config=self.l2t_config) # Updated
         MockL2TProcessorClass.return_value = mock_processor_instance
         mock_processor_instance.run.return_value = mock_successful_result
 
@@ -89,7 +93,12 @@ class TestL2TOrchestrator(unittest.TestCase):
         
         solution, summary_str = orchestrator.solve(problem_text)
 
-        MockL2TProcessorClass.assert_called_once_with(llm_client=orchestrator.llm_client, config=self.l2t_config)
+        MockL2TProcessorClass.assert_called_once_with(
+            api_key=self.api_key, # Pass api_key
+            config=self.l2t_config,
+            enable_rate_limiting=True, # Default values
+            enable_audit_logging=True # Default values
+        )
         mock_processor_instance.run.assert_called_once_with(problem_text)
         MockComplexityAssessor.assert_not_called() # Should not be called in ALWAYS_L2T mode
 
@@ -125,7 +134,7 @@ class TestL2TOrchestrator(unittest.TestCase):
         mock_fallback_answer = "Fallback one-shot answer."
         mock_fallback_stats = LLMCallStats(model_name="fallback-model", prompt_tokens=10, completion_tokens=20, call_duration_seconds=0.5)
 
-        mock_processor_instance = MockL2TProcessor(llm_client=MagicMock(), config=self.l2t_config)
+        mock_processor_instance = MockL2TProcessor(api_key=self.api_key, config=self.l2t_config) # Updated
         MockL2TProcessorClass.return_value = mock_processor_instance
         mock_processor_instance.run.return_value = mock_failed_result
 
@@ -134,7 +143,12 @@ class TestL2TOrchestrator(unittest.TestCase):
         orchestrator = self._create_orchestrator(L2TTriggerMode.ALWAYS_L2T)
         solution, summary_str = orchestrator.solve(problem_text)
 
-        MockL2TProcessorClass.assert_called_once_with(llm_client=orchestrator.llm_client, config=self.l2t_config)
+        MockL2TProcessorClass.assert_called_once_with(
+            api_key=self.api_key, # Pass api_key
+            config=self.l2t_config,
+            enable_rate_limiting=True, # Default values
+            enable_audit_logging=True # Default values
+        )
         mock_processor_instance.run.assert_called_once_with(problem_text)
         MockLLMClient.return_value.call.assert_called_once_with(
             prompt=problem_text, models=self.direct_oneshot_model_names, temperature=self.direct_oneshot_temperature
@@ -153,25 +167,32 @@ class TestL2TOrchestrator(unittest.TestCase):
         self.assertIn(f"Final Answer:\n{mock_fallback_answer}", summary_str)
 
 
-    @patch("src.l2t_orchestrator.LLMClient")
+    @patch("src.l2t_orchestrator.OneShotExecutor") # Patch OneShotExecutor
+    @patch("src.l2t_orchestrator.LLMClient") # Keep LLMClient patch for other tests
     @patch("src.l2t_orchestrator.L2TProcessor")
     @patch("src.l2t_orchestrator.ComplexityAssessor")
-    def test_solve_never_l2t(self, MockComplexityAssessor, MockL2TProcessor, MockLLMClient):
+    def test_solve_never_l2t(self, MockComplexityAssessor, MockL2TProcessor, MockLLMClient, MockOneShotExecutorClass):
         problem_text = "Test problem: never L2T."
         mock_oneshot_answer = "Direct one-shot answer."
         mock_oneshot_stats = LLMCallStats(model_name="oneshot-model", prompt_tokens=15, completion_tokens=25, call_duration_seconds=0.8)
 
-        MockLLMClient.return_value.call.return_value = (mock_oneshot_answer, mock_oneshot_stats)
+        mock_oneshot_executor_instance = MockOneShotExecutorClass.return_value
+        mock_oneshot_executor_instance.run_direct_oneshot.return_value = (mock_oneshot_answer, mock_oneshot_stats)
 
         orchestrator = self._create_orchestrator(L2TTriggerMode.NEVER_L2T)
         solution, summary_str = orchestrator.solve(problem_text)
 
-        MockLLMClient.return_value.call.assert_called_once_with(
-            prompt=problem_text, models=self.direct_oneshot_model_names, temperature=self.direct_oneshot_temperature
+        MockOneShotExecutorClass.assert_called_once_with(
+            llm_client=orchestrator.llm_client,
+            direct_oneshot_model_names=self.direct_oneshot_model_names,
+            direct_oneshot_temperature=self.direct_oneshot_temperature
         )
+        mock_oneshot_executor_instance.run_direct_oneshot.assert_called_once_with(problem_text)
+        
         # In NEVER_L2T mode, L2TProcessor should not be instantiated
         MockL2TProcessor.assert_not_called()
         MockComplexityAssessor.assert_not_called()
+        MockLLMClient.return_value.call.assert_not_called() # LLMClient.call should not be called directly
 
         self.assertTrue(solution.succeeded) # One-shot is considered successful if it returns an answer
         self.assertEqual(solution.final_answer, mock_oneshot_answer)
@@ -183,10 +204,11 @@ class TestL2TOrchestrator(unittest.TestCase):
         self.assertIn(f"Final Answer:\n{mock_oneshot_answer}", summary_str)
 
 
+    @patch("src.l2t_orchestrator.OneShotExecutor") # Patch OneShotExecutor
     @patch("src.l2t_orchestrator.L2TProcessor")
     @patch("src.l2t_orchestrator.ComplexityAssessor")
-    @patch("src.l2t_orchestrator.LLMClient")
-    def test_solve_assess_first_oneshot_decision(self, MockLLMClient, MockComplexityAssessorClass, MockL2TProcessorClass): # Changed MockL2TProcessor to MockL2TProcessorClass
+    @patch("src.l2t_orchestrator.LLMClient") # Keep LLMClient patch for other tests
+    def test_solve_assess_first_oneshot_decision(self, MockLLMClient, MockComplexityAssessorClass, MockL2TProcessorClass, MockOneShotExecutorClass): # Changed MockL2TProcessor to MockL2TProcessorClass
         problem_text = "Test problem: assess first, then oneshot."
         mock_oneshot_answer = "Assessed one-shot answer."
         mock_oneshot_stats = LLMCallStats(model_name="assessed-oneshot-model", prompt_tokens=20, completion_tokens=30, call_duration_seconds=1.0)
@@ -195,17 +217,24 @@ class TestL2TOrchestrator(unittest.TestCase):
         mock_assessor_instance = MockComplexityAssessor(llm_client=MagicMock(), small_model_names=self.assessment_model_names, temperature=self.assessment_temperature, use_heuristic_shortcut=True)
         MockComplexityAssessorClass.return_value = mock_assessor_instance
         mock_assessor_instance.assess.return_value = (AssessmentDecision.ONESHOT, mock_assessment_stats)
-        MockLLMClient.return_value.call.return_value = (mock_oneshot_answer, mock_oneshot_stats)
+        
+        mock_oneshot_executor_instance = MockOneShotExecutorClass.return_value
+        mock_oneshot_executor_instance.run_direct_oneshot.return_value = (mock_oneshot_answer, mock_oneshot_stats)
 
         orchestrator = self._create_orchestrator(L2TTriggerMode.ASSESS_FIRST)
         solution, summary_str = orchestrator.solve(problem_text)
 
         mock_assessor_instance.assess.assert_called_once_with(problem_text)
-        MockLLMClient.return_value.call.assert_called_once_with(
-            prompt=problem_text, models=self.direct_oneshot_model_names, temperature=self.direct_oneshot_temperature
+        MockOneShotExecutorClass.assert_called_once_with(
+            llm_client=orchestrator.llm_client,
+            direct_oneshot_model_names=self.direct_oneshot_model_names,
+            direct_oneshot_temperature=self.direct_oneshot_temperature
         )
+        mock_oneshot_executor_instance.run_direct_oneshot.assert_called_once_with(problem_text)
+        
         # L2TProcessor is instantiated in ASSESS_FIRST mode, but its run method should not be called if ONESHOT
         MockL2TProcessorClass.return_value.run.assert_not_called()
+        MockLLMClient.return_value.call.assert_not_called() # LLMClient.call should not be called directly
 
         self.assertTrue(solution.succeeded)
         self.assertEqual(solution.final_answer, mock_oneshot_answer)
@@ -238,7 +267,7 @@ class TestL2TOrchestrator(unittest.TestCase):
         MockComplexityAssessorClass.return_value = mock_assessor_instance
         mock_assessor_instance.assess.return_value = (AssessmentDecision.AOT, mock_assessment_stats) # AOT decision
 
-        mock_processor_instance = MockL2TProcessor(llm_client=MagicMock(), config=self.l2t_config)
+        mock_processor_instance = MockL2TProcessor(api_key=self.api_key, config=self.l2t_config) # Updated
         MockL2TProcessorClass.return_value = mock_processor_instance
         mock_processor_instance.run.return_value = mock_l2t_result
 
@@ -246,7 +275,12 @@ class TestL2TOrchestrator(unittest.TestCase):
         solution, summary_str = orchestrator.solve(problem_text)
 
         mock_assessor_instance.assess.assert_called_once_with(problem_text)
-        MockL2TProcessorClass.assert_called_once_with(llm_client=orchestrator.llm_client, config=self.l2t_config)
+        MockL2TProcessorClass.assert_called_once_with(
+            api_key=self.api_key, # Pass api_key
+            config=self.l2t_config,
+            enable_rate_limiting=True, # Default values
+            enable_audit_logging=True # Default values
+        )
         mock_processor_instance.run.assert_called_once_with(problem_text)
         MockLLMClient.return_value.call.assert_not_called() # No direct one-shot call
 
@@ -263,10 +297,11 @@ class TestL2TOrchestrator(unittest.TestCase):
         self.assertIn(f"Final Answer:\n{mock_l2t_result.final_answer}", summary_str)
 
 
+    @patch("src.l2t_orchestrator.OneShotExecutor") # Patch OneShotExecutor
     @patch("src.l2t_orchestrator.L2TProcessor")
     @patch("src.l2t_orchestrator.ComplexityAssessor")
-    @patch("src.l2t_orchestrator.LLMClient")
-    def test_solve_assess_first_l2t_decision_failed_fallback(self, MockLLMClient, MockComplexityAssessorClass, MockL2TProcessorClass):
+    @patch("src.l2t_orchestrator.LLMClient") # Keep LLMClient patch for other tests
+    def test_solve_assess_first_l2t_decision_failed_fallback(self, MockLLMClient, MockComplexityAssessorClass, MockL2TProcessorClass, MockOneShotExecutorClass):
         problem_text = "Test problem: assess first, L2T fails, then fallback."
         mock_failed_l2t_result = L2TResult(
             final_answer=None,
@@ -283,19 +318,25 @@ class TestL2TOrchestrator(unittest.TestCase):
         MockComplexityAssessorClass.return_value = mock_assessor_instance
         mock_assessor_instance.assess.return_value = (AssessmentDecision.AOT, mock_assessment_stats) # AOT decision
 
-        mock_processor_instance = MockL2TProcessor(llm_client=MagicMock(), config=self.l2t_config)
+        mock_processor_instance = MockL2TProcessor(api_key=self.api_key, config=self.l2t_config) # Updated
         MockL2TProcessorClass.return_value = mock_processor_instance
         mock_processor_instance.run.return_value = mock_failed_l2t_result
-        MockLLMClient.return_value.call.return_value = (mock_fallback_answer, mock_fallback_stats)
+        
+        mock_oneshot_executor_instance = MockOneShotExecutorClass.return_value
+        mock_oneshot_executor_instance.run_direct_oneshot.return_value = (mock_fallback_answer, mock_fallback_stats)
 
         orchestrator = self._create_orchestrator(L2TTriggerMode.ASSESS_FIRST)
         solution, summary_str = orchestrator.solve(problem_text)
 
         mock_assessor_instance.assess.assert_called_once_with(problem_text)
         mock_processor_instance.run.assert_called_once_with(problem_text)
-        MockLLMClient.return_value.call.assert_called_once_with(
-            prompt=problem_text, models=self.direct_oneshot_model_names, temperature=self.direct_oneshot_temperature
+        MockOneShotExecutorClass.assert_called_once_with(
+            llm_client=orchestrator.llm_client,
+            direct_oneshot_model_names=self.direct_oneshot_model_names,
+            direct_oneshot_temperature=self.direct_oneshot_temperature
         )
+        mock_oneshot_executor_instance.run_direct_oneshot.assert_called_once_with(problem_text, is_fallback=True)
+        MockLLMClient.return_value.call.assert_not_called() # LLMClient.call should not be called directly
 
         self.assertTrue(solution.succeeded) # Overall solution is successful if fallback provides an answer
         self.assertEqual(solution.final_answer, mock_fallback_answer)
@@ -311,10 +352,11 @@ class TestL2TOrchestrator(unittest.TestCase):
         self.assertIn(f"Final Answer:\n{mock_fallback_answer}", summary_str)
 
 
+    @patch("src.l2t_orchestrator.OneShotExecutor") # Patch OneShotExecutor
     @patch("src.l2t_orchestrator.L2TProcessor")
     @patch("src.l2t_orchestrator.ComplexityAssessor")
-    @patch("src.l2t_orchestrator.LLMClient")
-    def test_solve_assess_first_assessment_error_fallback(self, MockLLMClient, MockComplexityAssessorClass, MockL2TProcessorClass): # Changed MockL2TProcessor to MockL2TProcessorClass
+    @patch("src.l2t_orchestrator.LLMClient") # Keep LLMClient patch for other tests
+    def test_solve_assess_first_assessment_error_fallback(self, MockLLMClient, MockComplexityAssessorClass, MockL2TProcessorClass, MockOneShotExecutorClass): # Changed MockL2TProcessor to MockL2TProcessorClass
         problem_text = "Test problem: assessment error, then fallback."
         mock_fallback_answer = "Fallback answer after assessment error."
         mock_fallback_stats = LLMCallStats(model_name="fallback-model", prompt_tokens=13, completion_tokens=23, call_duration_seconds=0.7)
@@ -324,7 +366,8 @@ class TestL2TOrchestrator(unittest.TestCase):
         MockComplexityAssessorClass.return_value = mock_assessor_instance
         mock_assessor_instance.assess.return_value = (AssessmentDecision.ERROR, mock_assessment_stats) # ERROR decision
 
-        MockLLMClient.return_value.call.return_value = (mock_fallback_answer, mock_fallback_stats)
+        mock_oneshot_executor_instance = MockOneShotExecutorClass.return_value
+        mock_oneshot_executor_instance.run_direct_oneshot.return_value = (mock_fallback_answer, mock_fallback_stats)
 
         orchestrator = self._create_orchestrator(L2TTriggerMode.ASSESS_FIRST)
         solution, summary_str = orchestrator.solve(problem_text)
@@ -332,9 +375,13 @@ class TestL2TOrchestrator(unittest.TestCase):
         mock_assessor_instance.assess.assert_called_once_with(problem_text)
         # L2TProcessor is instantiated in ASSESS_FIRST mode, but its run method should not be called if assessment errors
         MockL2TProcessorClass.return_value.run.assert_not_called()
-        MockLLMClient.return_value.call.assert_called_once_with(
-            prompt=problem_text, models=self.direct_oneshot_model_names, temperature=self.direct_oneshot_temperature
+        MockOneShotExecutorClass.assert_called_once_with(
+            llm_client=orchestrator.llm_client,
+            direct_oneshot_model_names=self.direct_oneshot_model_names,
+            direct_oneshot_temperature=self.direct_oneshot_temperature
         )
+        mock_oneshot_executor_instance.run_direct_oneshot.assert_called_once_with(problem_text, is_fallback=True)
+        MockLLMClient.return_value.call.assert_not_called() # LLMClient.call should not be called directly
 
         self.assertTrue(solution.succeeded) # Overall solution is successful if fallback provides an answer
         self.assertEqual(solution.final_answer, mock_fallback_answer)
@@ -350,10 +397,14 @@ class TestL2TOrchestrator(unittest.TestCase):
         self.assertIn(f"Final Answer:\n{mock_fallback_answer}", summary_str)
 
 
+    @patch("src.l2t_orchestrator.OneShotExecutor") # Patch OneShotExecutor
     @patch("src.l2t_orchestrator.L2TProcessor")
     @patch("src.l2t_orchestrator.ComplexityAssessor")
-    @patch("src.l2t_orchestrator.LLMClient")
-    def test_summary_generation_content(self, MockLLMClient, MockComplexityAssessorClass, MockL2TProcessorClass):
+    @patch("src.l2t_orchestrator.LLMClient") # Keep LLMClient patch for other tests
+    def test_summary_generation_content(self, MockLLMClient, MockComplexityAssessorClass, MockL2TProcessorClass, MockOneShotExecutorClass):
+        # Explicitly set MockLLMClient.return_value.call as MagicMock
+        MockLLMClient.return_value.call = MagicMock()
+
         problem_text = "Test problem for summary details."
         
         reasoning_graph_mock = L2TGraph()
@@ -365,7 +416,8 @@ class TestL2TOrchestrator(unittest.TestCase):
             total_prompt_tokens=456,
             total_llm_interaction_time_seconds=1.23,
             total_process_wall_clock_time_seconds=2.34,
-            succeeded=True
+            succeeded=True,
+            error_message=None,
         )
         reasoning_graph_mock.add_node(MagicMock(id="root12345"), is_root=True)
 
@@ -378,7 +430,7 @@ class TestL2TOrchestrator(unittest.TestCase):
         MockComplexityAssessorClass.return_value = mock_assessor_instance
         mock_assessor_instance.assess.return_value = (AssessmentDecision.AOT, mock_assessment_stats)
 
-        mock_processor_instance = MockL2TProcessor(llm_client=MagicMock(), config=self.l2t_config)
+        mock_processor_instance = MockL2TProcessor(api_key=self.api_key, config=self.l2t_config)
         MockL2TProcessorClass.return_value = mock_processor_instance
         mock_processor_instance.run.return_value = mock_detailed_l2t_result
 
@@ -405,9 +457,10 @@ class TestL2TOrchestrator(unittest.TestCase):
         self.assertIn(f"Total Process Wall-Clock Time: {solution.total_wall_clock_time_seconds:.2f}s", summary_str)
 
         # Scenario: Never L2T (direct one-shot)
-        MockLLMClient.return_value.call.reset_mock()
+        mock_oneshot_executor_instance = MockOneShotExecutorClass.return_value
+        mock_oneshot_executor_instance.run_direct_oneshot.reset_mock()
         orchestrator_never = self._create_orchestrator(L2TTriggerMode.NEVER_L2T)
-        MockLLMClient.return_value.call.return_value = (mock_main_oneshot_stats.model_name, mock_main_oneshot_stats) # Mock for direct one-shot
+        mock_oneshot_executor_instance.run_direct_oneshot.return_value = (mock_main_oneshot_stats.model_name, mock_main_oneshot_stats) # Mock for direct one-shot
         solution_never, summary_str_never = orchestrator_never.solve(problem_text)
 
         self.assertIn("OVERALL L2T ORCHESTRATOR SUMMARY", summary_str_never)
@@ -419,13 +472,13 @@ class TestL2TOrchestrator(unittest.TestCase):
         self.assertIn(f"Total LLM Interaction Time (All Calls): {mock_main_oneshot_stats.call_duration_seconds:.2f}s", summary_str_never)
 
         # Scenario: Assess -> L2T (failed) -> Fallback
-        MockLLMClient.return_value.call.reset_mock()
+        mock_oneshot_executor_instance.run_direct_oneshot.reset_mock()
         mock_assessor_instance.assess.reset_mock()
         mock_processor_instance.run.reset_mock()
 
         mock_assessor_instance.assess.return_value = (AssessmentDecision.AOT, mock_assessment_stats)
         mock_processor_instance.run.return_value = L2TResult(succeeded=False, error_message="L2T failed for summary test")
-        MockLLMClient.return_value.call.return_value = ("Fallback summary answer", mock_fallback_stats)
+        mock_oneshot_executor_instance.run_direct_oneshot.return_value = ("Fallback summary answer", mock_fallback_stats)
 
         orchestrator_fallback = self._create_orchestrator(L2TTriggerMode.ASSESS_FIRST)
         solution_fallback, summary_str_fallback = orchestrator_fallback.solve(problem_text)
@@ -443,10 +496,14 @@ class TestL2TOrchestrator(unittest.TestCase):
         self.assertIn(f"Grand Total Tokens (All Calls): {expected_total_completion_fallback + expected_total_prompt_fallback}", summary_str_fallback)
         self.assertIn(f"Total LLM Interaction Time (All Calls): {expected_total_llm_time_fallback:.2f}s", summary_str_fallback)
 
-    @patch("src.l2t_orchestrator.L2TProcessor") # Add this patch
+    @patch("src.l2t_orchestrator.OneShotExecutor") # Add this patch
+    @patch("src.l2t_orchestrator.L2TProcessor")
     @patch("src.l2t_orchestrator.ComplexityAssessor")
     @patch("src.l2t_orchestrator.LLMClient")
-    def test_solve_assess_first_with_custom_heuristic_detector(self, MockLLMClient, MockComplexityAssessorClass, MockL2TProcessorClass): # Add MockL2TProcessorClass
+    def test_solve_assess_first_with_custom_heuristic_detector(self, MockLLMClient, MockComplexityAssessorClass, MockL2TProcessorClass, MockOneShotExecutorClass): # Add MockL2TProcessorClass
+        # Explicitly set MockLLMClient.return_value.call as MagicMock
+        MockLLMClient.return_value.call = MagicMock()
+
         problem_text = "Test problem with custom heuristic detector."
         
         # Create a custom mock heuristic detector

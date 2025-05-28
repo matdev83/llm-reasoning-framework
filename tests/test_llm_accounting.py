@@ -18,18 +18,26 @@ class TestLLMAccountingIntegration(unittest.TestCase):
     def setUp(self):
         # Set a dummy API key for LLMClient initialization
         os.environ["OPENROUTER_API_KEY"] = "dummy_key_for_testing"
-        self.llm_client = LLMClient(api_key="dummy_key_for_testing")
+        # Ensure audit logging is enabled for the test client
+        self.llm_client = LLMClient(api_key="dummy_key_for_testing", enable_audit_logging=True)
 
         # Ensure a clean slate for the database for each test
         if os.path.exists(DB_NAME):
             os.remove(DB_NAME)
         
+        # Connect to the database for audit logging via audit_logger
+        if self.llm_client.audit_logger:
+            self.llm_client.audit_logger.connect()
+
         # Patch time.monotonic to control call_duration_seconds
         self.mock_monotonic_patch = patch('time.monotonic')
         self.mock_monotonic = self.mock_monotonic_patch.start()
-        self.mock_monotonic.side_effect = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0] # Provide enough values
+        self.mock_monotonic.side_effect = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0] # Extended for failover test
 
     def tearDown(self):
+        # Close the database connection via audit_logger
+        if self.llm_client.audit_logger:
+            self.llm_client.audit_logger.close()
         # Clean up the database file after each test
         if os.path.exists(DB_NAME):
             os.remove(DB_NAME)

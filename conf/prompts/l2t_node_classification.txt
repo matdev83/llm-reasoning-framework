@@ -12,3 +12,4 @@ Based on the context and evaluation criteria, classify this thought. Choose one 
 - BACKTRACK: Reasoning should backtrack and continue from a previous thought (e.g., parent or ancestor).
 
 Your classification (must be one of the exact category names CONTINUE, TERMINATE_BRANCH, FINAL_ANSWER, BACKTRACK):
+{{remaining_steps_hint}}

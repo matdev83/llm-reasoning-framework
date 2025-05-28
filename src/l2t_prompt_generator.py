@@ -62,18 +62,30 @@ class L2TPromptGenerator:
         graph_context: str,
         node_to_classify_content: str,
         x_eva: Optional[str] = None,
+        remaining_steps_hint: Optional[int] = None, # New parameter
     ) -> str:
         """
         Constructs the prompt for classifying a thought node.
         """
         eva = x_eva if x_eva is not None else self.l2t_config.x_eva_default
-        return (
+        
+        prompt = (
             self._node_classification_prompt_template.replace(
                 "{{graph_context}}", graph_context
             )
             .replace("{{node_to_classify_content}}", node_to_classify_content)
             .replace("{{x_eva}}", eva)
         )
+        
+        if remaining_steps_hint is not None:
+            prompt = prompt.replace(
+                "{{remaining_steps_hint}}",
+                f"You have approximately {remaining_steps_hint} reasoning steps remaining. Please try to converge to a final answer."
+            )
+        else:
+            prompt = prompt.replace("{{remaining_steps_hint}}", "") # Remove placeholder if no hint
+
+        return prompt
 
     def construct_l2t_thought_generation_prompt(
         self,
@@ -81,13 +93,15 @@ class L2TPromptGenerator:
         parent_node_content: str,
         x_fmt: Optional[str] = None,
         x_eva: Optional[str] = None,
+        remaining_steps_hint: Optional[int] = None, # New parameter
     ) -> str:
         """
         Constructs the prompt for generating new thoughts.
         """
         fmt = x_fmt if x_fmt is not None else self.l2t_config.x_fmt_default
         eva = x_eva if x_eva is not None else self.l2t_config.x_eva_default
-        return (
+        
+        prompt = (
             self._thought_generation_prompt_template.replace(
                 "{{graph_context}}", graph_context
             )
@@ -95,3 +109,13 @@ class L2TPromptGenerator:
             .replace("{{x_fmt}}", fmt)
             .replace("{{x_eva}}", eva)
         )
+
+        if remaining_steps_hint is not None:
+            prompt = prompt.replace(
+                "{{remaining_steps_hint}}",
+                f"You have approximately {remaining_steps_hint} reasoning steps remaining. Please try to converge to a final answer."
+            )
+        else:
+            prompt = prompt.replace("{{remaining_steps_hint}}", "") # Remove placeholder if no hint
+
+        return prompt

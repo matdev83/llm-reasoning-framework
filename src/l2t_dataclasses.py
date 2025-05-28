@@ -113,6 +113,7 @@ class L2TConfig:
     max_time_seconds: int = DEFAULT_L2T_MAX_TIME_SECONDS
     x_fmt_default: str = DEFAULT_L2T_X_FMT_DEFAULT
     x_eva_default: str = DEFAULT_L2T_X_EVA_DEFAULT
+    pass_remaining_steps_pct: Optional[float] = None # New parameter for budget hints
 
 
 @dataclass

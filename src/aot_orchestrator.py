@@ -19,16 +19,22 @@ class InteractiveAoTOrchestrator:
                  assessment_model_names: List[str],
                  assessment_temperature: float,
                  api_key: str,
-                 use_heuristic_shortcut: bool = True, # New parameter
-                 heuristic_detector: Optional[HeuristicDetector] = None): # New parameter
+                 use_heuristic_shortcut: bool = True,
+                 heuristic_detector: Optional[HeuristicDetector] = None,
+                 enable_rate_limiting: bool = True, # New parameter
+                 enable_audit_logging: bool = True): # New parameter
 
         self.trigger_mode = trigger_mode
-        self.use_heuristic_shortcut = use_heuristic_shortcut # Store it
+        self.use_heuristic_shortcut = use_heuristic_shortcut
         self.aot_config = aot_config
         self.direct_oneshot_model_names = direct_oneshot_model_names
         self.direct_oneshot_temperature = direct_oneshot_temperature
-        self.llm_client = LLMClient(api_key=api_key)
-        self.heuristic_detector = heuristic_detector # Store the passed detector
+        self.llm_client = LLMClient(
+            api_key=api_key,
+            enable_rate_limiting=enable_rate_limiting,
+            enable_audit_logging=enable_audit_logging
+        )
+        self.heuristic_detector = heuristic_detector
 
         self.complexity_assessor = None
         if self.trigger_mode == AotTriggerMode.ASSESS_FIRST:

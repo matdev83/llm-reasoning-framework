@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from src.aot_enums import AotTriggerMode
 from src.aot_dataclasses import AoTRunnerConfig
 from src.aot_orchestrator import InteractiveAoTOrchestrator
+from src.l2t_enums import L2TTriggerMode # Import L2TTriggerMode
 from src.aot_constants import (
     DEFAULT_MAIN_MODEL_NAMES as DEFAULT_AOT_MAIN_MODEL_NAMES, # Renamed for clarity
     DEFAULT_SMALL_MODEL_NAMES as DEFAULT_AOT_ASSESSMENT_MODEL_NAMES, # Renamed
@@ -56,6 +57,12 @@ def main():
               f" '{AotTriggerMode.NEVER_AOT.value}': Force ONESHOT (direct answer).\n"
               f" 'l2t': Use Learn-to-Think process.")
     )
+
+    # General LLM Accounting arguments
+    parser.add_argument("--enable-rate-limiting", action="store_true",
+                        help="Enable rate limiting for LLM calls.")
+    parser.add_argument("--enable-audit-logging", action="store_true",
+                        help="Enable audit logging for LLM prompts and responses.")
 
     # AoT Configuration Group
     aot_group = parser.add_argument_group('AoT Process Configuration (used if processing-mode is AoT-related)')
@@ -157,14 +164,26 @@ def main():
             x_fmt_default=args.l2t_x_fmt_default,
             x_eva_default=args.l2t_x_eva_default,
         )
-        l2t_orchestrator = L2TOrchestrator(l2t_config=l2t_config, api_key=api_key)
+        l2t_orchestrator = L2TOrchestrator(
+            trigger_mode=L2TTriggerMode.ALWAYS_L2T, # Corrected to L2TTriggerMode
+            l2t_config=l2t_config,
+            direct_oneshot_model_names=args.l2t_initial_prompt_models, # Using initial prompt models for one-shot
+            direct_oneshot_temperature=args.l2t_initial_prompt_temperature, # Using initial prompt temp for one-shot
+            assessment_model_names=args.l2t_classification_models, # Using classification models for assessment
+            assessment_temperature=args.l2t_classification_temperature, # Using classification temp for assessment
+            api_key=api_key,
+            use_heuristic_shortcut=True, # Default for L2T, not exposed via CLI
+            heuristic_detector=None, # Default for L2T, not exposed via CLI
+            enable_rate_limiting=args.enable_rate_limiting,
+            enable_audit_logging=args.enable_audit_logging
+        )
         l2t_result, l2t_summary_str = l2t_orchestrator.solve(problem_text)
         
         print("\nL2T Process Summary:")
         print(l2t_summary_str)
 
         if not l2t_result.succeeded:
-            logging.error(f"L2T process did not succeed. Error: {l2t_result.error_message}")
+            logging.error(f"L2T process did not succeed. Error: {l2t_result.l2t_result.error_message if l2t_result.l2t_result and l2t_result.l2t_result.error_message else 'Unknown error'}")
             sys.exit(1)
         else:
             logging.info("L2T process completed successfully.")
@@ -200,7 +219,9 @@ def main():
             assessment_model_names=args.aot_assess_models,
             assessment_temperature=args.aot_assess_temp,
             api_key=api_key,
-            use_heuristic_shortcut=not args.aot_disable_heuristic 
+            use_heuristic_shortcut=not args.aot_disable_heuristic,
+            enable_rate_limiting=args.enable_rate_limiting,
+            enable_audit_logging=args.enable_audit_logging
         )
         
         solution, overall_summary_str = aot_orchestrator.solve(problem_text) 

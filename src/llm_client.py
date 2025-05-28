@@ -3,12 +3,15 @@ import requests
 import logging
 from typing import List, Optional, Tuple
 from llm_accounting import LLMAccounting
+from llm_accounting.audit_log import AuditLogger
+from llm_accounting.models.limits import LimitScope, LimitType, TimeInterval
 
 from src.aot_dataclasses import LLMCallStats
 from src.aot_constants import OPENROUTER_API_URL, HTTP_REFERER, APP_TITLE
 
 class LLMClient:
-    def __init__(self, api_key: str, api_url: str = OPENROUTER_API_URL, http_referer: str = HTTP_REFERER, app_title: str = APP_TITLE):
+    def __init__(self, api_key: str, api_url: str = OPENROUTER_API_URL, http_referer: str = HTTP_REFERER, app_title: str = APP_TITLE,
+                 enable_rate_limiting: bool = True, enable_audit_logging: bool = True):
         if not api_key:
             raise ValueError("OPENROUTER_API_KEY must be provided.")
         self.api_key = api_key
@@ -20,6 +23,9 @@ class LLMClient:
             "Content-Type": "application/json"
         }
         self.accounting = LLMAccounting()
+        self.enable_rate_limiting = enable_rate_limiting
+        self.enable_audit_logging = enable_audit_logging
+        self.audit_logger = AuditLogger() if enable_audit_logging else None
 
     def call(self, prompt: str, models: List[str], temperature: float) -> Tuple[str, LLMCallStats]:
         if not models:
@@ -41,6 +47,19 @@ class LLMClient:
             call_start_time = time.monotonic()
             
             try:
+                if self.enable_rate_limiting:
+                    allowed, reason = self.accounting.check_quota(
+                        model=model_name,
+                        username="api_user",
+                        caller_name="LLMClient",
+                        input_tokens=len(prompt.split()) # Approximate token count for quota check
+                    )
+                    if not allowed:
+                        logging.warning(f"Rate limit exceeded for model {model_name}: {reason}. Trying next model if available.")
+                        last_error_content_for_failover = f"Error: Rate limit exceeded - {reason}"
+                        last_error_stats_for_failover = current_call_stats
+                        continue # Skip to the next model
+
                 # Log the request before making the API call
                 self.accounting.track_usage(
                     model=model_name,
@@ -117,6 +136,14 @@ class LLMClient:
                     caller_name="LLMClient",
                     username="api_user"
                 )
+
+                if self.enable_audit_logging and self.audit_logger:
+                    self.audit_logger.log_prompt(
+                        app_name="LLMClient",
+                        user_name="api_user",
+                        model=model_name,
+                        prompt_text=prompt
+                    )
 
                 if content.startswith("Error:"): 
                     if model_name != models[-1]: 
