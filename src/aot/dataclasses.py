@@ -1,8 +1,8 @@
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple, Dict
-from src.aot_enums import AssessmentDecision
+from .enums import AssessmentDecision
 
-from src.aot_constants import (
+from .constants import (
     DEFAULT_MAIN_MODEL_NAMES, DEFAULT_MAX_STEPS, DEFAULT_MAX_TIME_SECONDS,
     DEFAULT_NO_PROGRESS_LIMIT, DEFAULT_MAIN_TEMPERATURE
 )

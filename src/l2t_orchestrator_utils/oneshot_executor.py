@@ -2,7 +2,7 @@ import logging
 import time
 from typing import List, Tuple
 from src.llm_client import LLMClient
-from src.aot_dataclasses import LLMCallStats
+from src.aot.dataclasses import LLMCallStats
 
 logger = logging.getLogger(__name__)
 

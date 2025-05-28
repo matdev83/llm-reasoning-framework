@@ -1,7 +1,7 @@
 import os
 from typing import Optional
 
-from src.l2t_dataclasses import L2TConfig
+from .dataclasses import L2TConfig
 
 _PROMPT_DIR = os.path.join(os.path.dirname(__file__), "..", "conf", "prompts")
 _L2T_INITIAL_PROMPT_FILE = os.path.join(_PROMPT_DIR, "l2t_initial.txt")

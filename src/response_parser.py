@@ -2,7 +2,7 @@ import re
 import logging
 from typing import List, Optional
 
-from src.aot_dataclasses import ParsedLLMOutput
+from src.aot.dataclasses import ParsedLLMOutput
 
 class ResponseParser:
     SKIP_KEYWORDS = [

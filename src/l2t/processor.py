@@ -4,23 +4,23 @@ import uuid  # For generating unique node IDs
 from typing import Optional, Tuple
 
 from src.llm_client import LLMClient # Use the actual LLMClient
-from src.aot_dataclasses import LLMCallStats # Import LLMCallStats from aot_dataclasses
+from src.aot.dataclasses import LLMCallStats # Import LLMCallStats from aot_dataclasses
 
-from src.l2t_dataclasses import (
+from .dataclasses import (
     L2TConfig,
     L2TGraph,
     L2TNode,
     L2TNodeCategory,
     L2TResult,
 )
-from src.l2t_prompt_generator import L2TPromptGenerator
-from src.l2t_response_parser import L2TResponseParser
+from .prompt_generator import L2TPromptGenerator
+from .response_parser import L2TResponseParser
 from src.l2t_processor_utils.node_processor import NodeProcessor # Import NodeProcessor
 
 logger = logging.getLogger(__name__)
 
 
-from src.aot_constants import OPENROUTER_API_URL, HTTP_REFERER, APP_TITLE # Import these constants
+from src.aot.constants import OPENROUTER_API_URL, HTTP_REFERER, APP_TITLE # Import these constants
 
 class L2TProcessor:
     def __init__(self, api_key: str, config: Optional[L2TConfig] = None,
@@ -82,9 +82,13 @@ class L2TProcessor:
         )
         graph.add_node(root_node, is_root=True)
         logger.info(f"Initial thought node {root_node_id} created: '{parsed_initial_thought[:100]}...'")
+        # logger.info(f"DEBUG: After adding root node, graph.v_pres = {list(graph.v_pres)}")
+        # logger.info(f"DEBUG: About to enter while loop with result.final_answer = {result.final_answer}")
+        # logger.warning(f"INIT: root_node_id={root_node_id}, graph.v_pres={list(graph.v_pres)}")
 
 
         # Reasoning Loop
+        termination_reason = None
         while (
             current_process_step < self.config.max_steps
             and len(graph.v_pres) > 0
@@ -93,7 +97,7 @@ class L2TProcessor:
             and result.final_answer is None
         ):
             current_process_step += 1
-            logger.info(
+            logger.warning(
                 f"--- L2T Process Step {current_process_step}/{self.config.max_steps} --- "
                 f"V_pres size: {len(graph.v_pres)}, Total nodes: {len(graph.nodes)} ---"
             )
@@ -103,32 +107,45 @@ class L2TProcessor:
             for node_id_to_classify in nodes_to_process_this_round:
                 if result.final_answer is not None:
                     break # Exit inner loop if final answer found
-                
+
                 self.node_processor.process_node(node_id_to_classify, graph, result, current_process_step)
 
             # Check if any new nodes were added to v_pres in this round.
-            # If v_pres is empty after processing all nodes in nodes_to_process_this_round,
-            # it means no CONTINUE nodes generated valid new thoughts.
             if not graph.v_pres and result.final_answer is None:
                 logger.info("No new thoughts generated in this step and no final answer. Terminating early.")
-                break
-
+                break # Keep termination_reason as None for now, let the final block determine it
+        
+        # After loop: determine termination reason
+        # Prioritize max_steps if it was reached
+        if current_process_step >= self.config.max_steps and result.final_answer is None:
+            termination_reason = "max_steps"
+        elif len(graph.nodes) >= self.config.max_total_nodes and result.final_answer is None:
+            termination_reason = "max_total_nodes"
+        elif (time.monotonic() - process_start_time) >= self.config.max_time_seconds and result.final_answer is None:
+            termination_reason = "max_time"
+        elif result.final_answer is None: # If no other reason was met and no final answer
+            termination_reason = "no_more_thoughts"
 
         # Finalization
         result.reasoning_graph = graph
+        # logger.debug(f"Finalization - current_process_step: {current_process_step}, max_steps: {self.config.max_steps}, termination_reason: {termination_reason}, final_answer: {result.final_answer}")
         if result.final_answer is None:
             result.succeeded = False
-            if len(graph.nodes) >= self.config.max_total_nodes:
-                result.error_message = "L2T process completed: Max total nodes reached."
-            elif current_process_step >= self.config.max_steps:
+            # logger.debug(f"Setting error message. Current termination_reason: {termination_reason}")
+            # logger.debug(f"About to assign error message. termination_reason is: {termination_reason}") # New debug print
+            if termination_reason == "max_steps":
                 result.error_message = "L2T process completed: Max steps reached."
-            elif (time.monotonic() - process_start_time) >= self.config.max_time_seconds:
+            elif termination_reason == "max_total_nodes":
+                result.error_message = "L2T process completed: Max total nodes reached."
+            elif termination_reason == "max_time":
                 result.error_message = "L2T process completed: Max time reached."
-            elif not graph.v_pres:
+            elif termination_reason == "no_more_thoughts":
                 result.error_message = "L2T process completed: No more thoughts to process and no final answer."
             else: # Should not happen if loop conditions are correct
                 result.error_message = "L2T process completed without a final answer for an unknown reason."
             logger.info(f"L2T process finished without a final answer. Reason: {result.error_message}")
+        else:
+            result.succeeded = True
         
         result.total_process_wall_clock_time_seconds = (
             time.monotonic() - process_start_time

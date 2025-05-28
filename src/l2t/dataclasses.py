@@ -2,11 +2,11 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional
 
-from src.aot_dataclasses import LLMCallStats # Import LLMCallStats
-from src.aot_enums import AssessmentDecision # Import AssessmentDecision
-from src.l2t_enums import L2TTriggerMode # Import L2TTriggerMode
+from src.aot.dataclasses import LLMCallStats # Import LLMCallStats
+from src.aot.enums import AssessmentDecision # Import AssessmentDecision
+from .enums import L2TTriggerMode # Import L2TTriggerMode
 
-from src.l2t_constants import (
+from .constants import (
     DEFAULT_L2T_CLASSIFICATION_MODEL_NAMES,
     DEFAULT_L2T_CLASSIFICATION_TEMPERATURE,
     DEFAULT_L2T_INITIAL_PROMPT_MODEL_NAMES,

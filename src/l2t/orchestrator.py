@@ -4,13 +4,13 @@ import io # Required for summary generation in L2TProcess
 from typing import List, Tuple, Optional, Any # Import Any
 
 from src.reasoning_process import ReasoningProcess # Import the base class
-from src.aot_dataclasses import LLMCallStats # Kept for OneShotExecutor if used by L2TProcess
-from src.aot_enums import AssessmentDecision 
+from src.aot.dataclasses import LLMCallStats # Kept for OneShotExecutor if used by L2TProcess
+from src.aot.enums import AssessmentDecision
 from src.complexity_assessor import ComplexityAssessor 
 from src.llm_client import LLMClient
-from src.l2t_dataclasses import L2TConfig, L2TResult, L2TSolution 
-from src.l2t_enums import L2TTriggerMode 
-from src.l2t_processor import L2TProcessor
+from .dataclasses import L2TConfig, L2TResult, L2TSolution
+from .enums import L2TTriggerMode
+from .processor import L2TProcessor
 from src.heuristic_detector import HeuristicDetector 
 # Utilities that might be used by L2TProcess or remain in L2TOrchestrator
 from src.l2t_orchestrator_utils.summary_generator import L2TSummaryGenerator

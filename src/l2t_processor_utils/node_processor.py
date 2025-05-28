@@ -3,10 +3,10 @@ import uuid
 from typing import Optional, Tuple
 
 from src.llm_client import LLMClient
-from src.aot_dataclasses import LLMCallStats
-from src.l2t_dataclasses import L2TConfig, L2TGraph, L2TNode, L2TNodeCategory, L2TResult
-from src.l2t_prompt_generator import L2TPromptGenerator
-from src.l2t_response_parser import L2TResponseParser
+from src.aot.dataclasses import LLMCallStats
+from src.l2t.dataclasses import L2TConfig, L2TGraph, L2TNode, L2TNodeCategory, L2TResult
+from src.l2t.prompt_generator import L2TPromptGenerator
+from src.l2t.response_parser import L2TResponseParser
 
 logger = logging.getLogger(__name__)
 

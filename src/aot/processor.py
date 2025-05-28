@@ -2,11 +2,11 @@ import time
 import logging
 import io
 from typing import List, Optional, Tuple
-from src.aot_dataclasses import LLMCallStats, ParsedLLMOutput, AoTRunnerConfig, AoTResult
+from .dataclasses import LLMCallStats, ParsedLLMOutput, AoTRunnerConfig, AoTResult
 from src.llm_client import LLMClient
 from src.prompt_generator import PromptGenerator
 from src.response_parser import ResponseParser
-from src.aot_constants import MIN_PREDICTED_STEP_TOKENS_FALLBACK, MIN_PREDICTED_STEP_DURATION_FALLBACK
+from .constants import MIN_PREDICTED_STEP_TOKENS_FALLBACK, MIN_PREDICTED_STEP_DURATION_FALLBACK
 
 class AoTProcessor:
     def __init__(self, llm_client: LLMClient, config: AoTRunnerConfig):

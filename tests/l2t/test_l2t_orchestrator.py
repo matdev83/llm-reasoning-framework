@@ -1,11 +1,11 @@
 import unittest
 from unittest.mock import patch, MagicMock, ANY
 
-from src.l2t_orchestrator import L2TOrchestrator 
-from src.l2t_dataclasses import L2TConfig, L2TResult, L2TGraph, L2TSolution
-from src.l2t_enums import L2TTriggerMode
-from src.aot_dataclasses import LLMCallStats 
-from src.aot_enums import AssessmentDecision 
+from src.l2t.orchestrator import L2TOrchestrator
+from src.l2t.dataclasses import L2TConfig, L2TResult, L2TGraph, L2TSolution
+from src.l2t.enums import L2TTriggerMode
+from src.aot.dataclasses import LLMCallStats
+from src.aot.enums import AssessmentDecision
 from src.l2t_orchestrator_utils.oneshot_executor import OneShotExecutor 
 from src.heuristic_detector import HeuristicDetector
 from typing import Optional
@@ -53,10 +53,10 @@ class TestL2TOrchestrator(unittest.TestCase):
             completion_tokens=60, prompt_tokens=110, call_duration_seconds=1.1
         )
 
-        self.patch_llm_client = patch("src.l2t_orchestrator.LLMClient")
-        self.patch_complexity_assessor = patch("src.l2t_orchestrator.ComplexityAssessor") 
-        self.patch_l2t_process = patch("src.l2t_orchestrator.L2TProcess")
-        self.patch_oneshot_executor = patch("src.l2t_orchestrator.OneShotExecutor")
+        self.patch_llm_client = patch("src.l2t.orchestrator.LLMClient")
+        self.patch_complexity_assessor = patch("src.l2t.orchestrator.ComplexityAssessor") 
+        self.patch_l2t_process = patch("src.l2t.orchestrator.L2TProcess")
+        self.patch_oneshot_executor = patch("src.l2t.orchestrator.OneShotExecutor")
 
         self.MockLLMClient = self.patch_llm_client.start()
         self.MockComplexityAssessorClass = self.patch_complexity_assessor.start() 

@@ -1,8 +1,8 @@
 import unittest
 
-from src.l2t_prompt_generator import L2TPromptGenerator
-from src.l2t_dataclasses import L2TConfig
-from src.l2t_constants import DEFAULT_L2T_X_FMT_DEFAULT, DEFAULT_L2T_X_EVA_DEFAULT
+from src.l2t.prompt_generator import L2TPromptGenerator
+from src.l2t.dataclasses import L2TConfig
+from src.l2t.constants import DEFAULT_L2T_X_FMT_DEFAULT, DEFAULT_L2T_X_EVA_DEFAULT
 
 
 class TestL2TPromptGenerator(unittest.TestCase):

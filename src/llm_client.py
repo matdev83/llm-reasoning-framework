@@ -7,8 +7,8 @@ from llm_accounting.audit_log import AuditLogger
 from llm_accounting.models.limits import LimitScope, LimitType, TimeInterval
 from llm_accounting.backends.sqlite import SQLiteBackend
 
-from src.aot_dataclasses import LLMCallStats
-from src.aot_constants import OPENROUTER_API_URL, HTTP_REFERER, APP_TITLE
+from src.aot.dataclasses import LLMCallStats
+from src.aot.constants import OPENROUTER_API_URL, HTTP_REFERER, APP_TITLE
 
 class LLMClient:
     def __init__(self, api_key: str, api_url: str = OPENROUTER_API_URL, http_referer: str = HTTP_REFERER, app_title: str = APP_TITLE,

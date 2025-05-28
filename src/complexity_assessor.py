@@ -1,8 +1,8 @@
 import logging
 from typing import List, Tuple
 
-from src.aot_dataclasses import LLMCallStats
-from src.aot_enums import AssessmentDecision
+from src.aot.dataclasses import LLMCallStats
+from src.aot.enums import AssessmentDecision
 from src.llm_client import LLMClient
 from src.prompt_generator import PromptGenerator
 from src.heuristic_detector import HeuristicDetector # Import the new class

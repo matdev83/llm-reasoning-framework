@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from typing import List, Optional
-from src.aot_constants import APP_TITLE
+from src.aot.constants import APP_TITLE
 
 _PROMPT_DIR = Path("conf/prompts")
 

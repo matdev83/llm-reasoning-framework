@@ -20,12 +20,12 @@ This heuristic checks for specific keywords and patterns in the problem prompt t
 
 To **disable** this heuristic and always use the assessment LLM for complexity evaluation (even for problems that might trigger the heuristic), use the `--disable-heuristic` CLI flag.
 
-### Iterative Reasoning Process (e.g., `AoTProcessor`, `L2TProcessor`)
+### Iterative Reasoning Process (e.g., `src/aot/processor.py`, `src/l2t/processor.py`)
 
-When an iterative reasoning process is triggered (e.g., the AoT or L2T process), a dedicated processor like `AoTProcessor` or `L2TProcessor` takes over. It iteratively:
-1.  Constructs a prompt using `PromptGenerator` (or `L2TPromptGenerator`), incorporating the problem statement and the history of previous reasoning steps.
-2.  Sends the prompt to the main LLM via `LLMClient`.
-3.  Parses the LLM's response using `ResponseParser` (or `L2TResponseParser`) to extract the current reasoning step, intermediate answers, and potential final answers.
+When an iterative reasoning process is triggered (e.g., the AoT or L2T process), a dedicated processor like `src.aot.processor.AoTProcessor` or `src.l2t.processor.L2TProcessor` takes over. It iteratively:
+1.  Constructs a prompt using `src.prompt_generator.PromptGenerator` (or `src.l2t.prompt_generator.L2TPromptGenerator`), incorporating the problem statement and the history of previous reasoning steps.
+2.  Sends the prompt to the main LLM via `src.llm_client.LLMClient`.
+3.  Parses the LLM's response using `src.response_parser.ResponseParser` (or `src.l2t.response_parser.L2TResponseParser`) to extract the current reasoning step, intermediate answers, and potential final answers.
 4.  Dynamically manages resource limits:
     *   **Max Steps**: Stops after a configured number of reasoning steps.
     *   **Max Reasoning Tokens**: Halts if the cumulative completion tokens for reasoning exceed a specified budget.
@@ -61,6 +61,12 @@ python -m src.cli_runner --reasoning-mode never-reasoning --problem "What is the
 
 # Example: Disable the heuristic, forcing LLM assessment
 python -m src.cli_runner --reasoning-mode assess-first --problem "Design a scalable microservices architecture." --disable-heuristic
+
+# Example: Directly run AoTProcess
+python -m src.cli_runner --processing-mode aot_direct --problem "Design a simple REST API for a blog." --aot-max-steps 5
+
+# Example: Directly run L2TProcess
+python -m src.cli_runner --processing-mode l2t_direct --problem "How does quantum computing work?" --l2t-max-steps 10
 ```
 
 ### CLI Parameters
@@ -69,12 +75,15 @@ Here are the available command-line arguments:
 
 *   **`--problem` / `-p`**: (Mutually exclusive with `--problem-filename`) The problem or question to solve.
 *   **`--problem-filename`**: (Mutually exclusive with `--problem`) Path to a file containing the problem.
-*   **`--reasoning-mode`**: Reasoning strategy trigger mode.
-    *   Choices: `always-reasoning`, `assess-first`, `never-reasoning`
+*   **`--processing-mode`**: Reasoning strategy trigger mode.
+    *   Choices: `always-reasoning`, `assess-first`, `never-reasoning`, `aot_direct`, `l2t_direct`, `l2t`
     *   Default: `assess-first` (`ASSESS_FIRST`)
     *   `always-reasoning`: Force an iterative reasoning process (e.g., AoT, L2T).
     *   `assess-first`: Use a small LLM to decide between one-shot or an advanced reasoning process.
     *   `never-reasoning`: Force one-shot processing (direct answer).
+    *   `aot_direct`: Directly run the AoTProcess.
+    *   `l2t_direct`: Directly run the L2TProcess.
+    *   `l2t`: Use the L2TOrchestrator (which internally uses L2TProcess).
 *   **`--main-models`**: Space-separated list of main LLM(s) for one-shot or advanced reasoning processes.
     *   Default: `tngtech/deepseek-r1t-chimera:free deepseek/deepseek-prover-v2:free`
 *   **`--main-temp`**: Temperature for main LLM(s).

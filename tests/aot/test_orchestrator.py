@@ -1,9 +1,9 @@
 import unittest
 from unittest.mock import patch, MagicMock, ANY
 
-from src.aot_orchestrator import InteractiveAoTOrchestrator
-from src.aot_dataclasses import AoTRunnerConfig, LLMCallStats, Solution, AoTResult 
-from src.aot_enums import AotTriggerMode, AssessmentDecision
+from src.aot.orchestrator import InteractiveAoTOrchestrator
+from src.aot.dataclasses import AoTRunnerConfig, LLMCallStats, Solution, AoTResult
+from src.aot.enums import AotTriggerMode, AssessmentDecision
 from src.heuristic_detector import HeuristicDetector
 from typing import Optional
 
@@ -56,9 +56,9 @@ class TestInteractiveAoTOrchestrator(unittest.TestCase):
             completion_tokens=50, prompt_tokens=100, call_duration_seconds=1.0
         )
         
-        self.patch_llm_client = patch("src.aot_orchestrator.LLMClient")
-        self.patch_complexity_assessor = patch("src.aot_orchestrator.ComplexityAssessor") # Standard patch
-        self.patch_aot_process = patch("src.aot_orchestrator.AoTProcess")
+        self.patch_llm_client = patch("src.aot.orchestrator.LLMClient")
+        self.patch_complexity_assessor = patch("src.aot.orchestrator.ComplexityAssessor") # Standard patch
+        self.patch_aot_process = patch("src.aot.orchestrator.AoTProcess")
 
         self.MockLLMClient = self.patch_llm_client.start()
         self.MockComplexityAssessorClass = self.patch_complexity_assessor.start() # This is a MagicMock for the class

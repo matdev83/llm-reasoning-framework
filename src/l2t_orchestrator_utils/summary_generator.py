@@ -1,9 +1,9 @@
 import io
 from typing import Optional # Added Optional
-from src.l2t_dataclasses import L2TResult, L2TSolution
-from src.l2t_enums import L2TTriggerMode
-from src.aot_enums import AssessmentDecision
-from src.aot_dataclasses import LLMCallStats 
+from src.l2t.dataclasses import L2TResult, L2TSolution
+from src.l2t.enums import L2TTriggerMode
+from src.aot.enums import AssessmentDecision
+from src.aot.dataclasses import LLMCallStats
 
 class L2TSummaryGenerator:
     def __init__(self, trigger_mode: L2TTriggerMode, use_heuristic_shortcut: bool):

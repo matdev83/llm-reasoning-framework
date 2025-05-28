@@ -4,11 +4,11 @@ import io
 from typing import List, Tuple, Optional, Any # Import Optional and Any
 
 from src.reasoning_process import ReasoningProcess # Import the base class
-from src.aot_enums import AotTriggerMode, AssessmentDecision
-from src.aot_dataclasses import LLMCallStats, AoTRunnerConfig, Solution
+from .enums import AotTriggerMode, AssessmentDecision
+from .dataclasses import LLMCallStats, AoTRunnerConfig, Solution
 from src.llm_client import LLMClient
 from src.complexity_assessor import ComplexityAssessor
-from src.aot_processor import AoTProcessor
+from .processor import AoTProcessor
 from src.heuristic_detector import HeuristicDetector
 
 

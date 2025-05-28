@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 
-from src.l2t_dataclasses import L2TNodeCategory
+from .dataclasses import L2TNodeCategory
 
 logger = logging.getLogger(__name__)
 

@@ -7,11 +7,12 @@ from typing import Optional
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.aot_enums import AotTriggerMode
-from src.aot_dataclasses import AoTRunnerConfig
-from src.aot_orchestrator import InteractiveAoTOrchestrator, AoTProcess # Import AoTProcess
-from src.l2t_enums import L2TTriggerMode 
-from src.aot_constants import (
+from src.aot.enums import AotTriggerMode
+from src.aot.dataclasses import AoTRunnerConfig
+from src.aot.orchestrator import InteractiveAoTOrchestrator
+from src.aot.processor import AoTProcessor
+from src.l2t.enums import L2TTriggerMode
+from src.aot.constants import (
     DEFAULT_MAIN_MODEL_NAMES as DEFAULT_AOT_MAIN_MODEL_NAMES, 
     DEFAULT_SMALL_MODEL_NAMES as DEFAULT_AOT_ASSESSMENT_MODEL_NAMES, 
     DEFAULT_MAX_STEPS as DEFAULT_AOT_MAX_STEPS, 
@@ -21,9 +22,11 @@ from src.aot_constants import (
     DEFAULT_ASSESSMENT_TEMPERATURE as DEFAULT_AOT_ASSESSMENT_TEMPERATURE 
 )
 
-from src.l2t_orchestrator import L2TOrchestrator, L2TProcess # Import L2TProcess
-from src.l2t_dataclasses import L2TConfig, L2TSolution # L2TSolution for direct L2TProcess
-from src.l2t_constants import (
+from src.l2t.orchestrator import L2TOrchestrator
+from src.l2t.processor import L2TProcessor
+from src.l2t.dataclasses import L2TConfig, L2TSolution # L2TSolution for direct L2TProcess
+from src.l2t_orchestrator_utils.summary_generator import L2TSummaryGenerator
+from src.l2t.constants import (
     DEFAULT_L2T_CLASSIFICATION_MODEL_NAMES,
     DEFAULT_L2T_THOUGHT_GENERATION_MODEL_NAMES,
     DEFAULT_L2T_INITIAL_PROMPT_MODEL_NAMES,
@@ -133,6 +136,12 @@ def main():
         logging.critical("OPENROUTER_API_KEY environment variable not set.")
         sys.exit(1)
     
+    llm_client = LLMClient(
+        api_key=api_key,
+        enable_rate_limiting=args.enable_rate_limiting,
+        enable_audit_logging=args.enable_audit_logging
+    )
+    
     problem_text: str
     if args.problem_filename:
         try:
@@ -184,17 +193,12 @@ def main():
     if current_processing_mode == DIRECT_AOT_MODE:
         logging.info(f"Direct AoTProcess mode selected.")
         # Direct AoTProcess instantiation and execution
-        aot_process = AoTProcess(
-            aot_config=aot_runner_config,
-            direct_oneshot_model_names=args.aot_main_models, # For fallback within AoTProcess
-            direct_oneshot_temperature=args.aot_main_temp, # For fallback within AoTProcess
-            api_key=api_key,
-            enable_rate_limiting=args.enable_rate_limiting,
-            enable_audit_logging=args.enable_audit_logging
+        aot_process = AoTProcessor(
+            llm_client=llm_client,
+            config=aot_runner_config
         )
-        # model_name for execute is for interface compatibility, actual models are in aot_config
-        aot_process.execute(problem_text, model_name="N/A_direct_aot") 
-        solution, overall_summary_str = aot_process.get_result()
+        aot_result, overall_summary_str = aot_process.run(problem_text)
+        solution = aot_result
         
         print("\nDirect AoTProcess Execution Summary:")
         print(overall_summary_str if overall_summary_str else "No summary returned.")
@@ -209,17 +213,23 @@ def main():
     elif current_processing_mode == DIRECT_L2T_MODE:
         logging.info(f"Direct L2TProcess mode selected.")
         # Direct L2TProcess instantiation and execution
-        l2t_process = L2TProcess(
-            l2t_config=l2t_config,
-            direct_oneshot_model_names=args.l2t_initial_prompt_models, # Fallback for L2TProcess
-            direct_oneshot_temperature=args.l2t_initial_prompt_temperature, # Fallback for L2TProcess
+        l2t_process = L2TProcessor(
             api_key=api_key,
+            config=l2t_config,
             enable_rate_limiting=args.enable_rate_limiting,
             enable_audit_logging=args.enable_audit_logging
         )
-        # model_name for execute is for interface compatibility
-        l2t_process.execute(problem_text, model_name="N/A_direct_l2t")
-        solution, overall_summary_str = l2t_process.get_result() # Expects L2TSolution, str
+        l2t_result = l2t_process.run(problem_text)
+        
+        # Generate summary using L2TSummaryGenerator
+        summary_generator = L2TSummaryGenerator(
+            trigger_mode=L2TTriggerMode.ALWAYS_L2T, # This is for direct L2TProcess, so always L2T
+            use_heuristic_shortcut=False # Not applicable for direct L2TProcess
+        )
+        overall_summary_str = summary_generator.generate_l2t_summary_from_result(l2t_result)
+        
+        # Create an L2TSolution object for consistency with other branches
+        solution = L2TSolution(l2t_result=l2t_result, final_answer=l2t_result.final_answer)
 
         print("\nDirect L2TProcess Execution Summary:")
         print(overall_summary_str if overall_summary_str else "No summary returned.")

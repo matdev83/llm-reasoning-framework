@@ -1,8 +1,8 @@
 import unittest
 import logging
 
-from src.l2t_response_parser import L2TResponseParser
-from src.l2t_dataclasses import L2TNodeCategory
+from src.l2t.response_parser import L2TResponseParser
+from src.l2t.dataclasses import L2TNodeCategory
 
 # Suppress logging output during tests for cleaner test results
 logging.disable(logging.CRITICAL)

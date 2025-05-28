@@ -1,21 +1,21 @@
 import unittest
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock, call, ANY
 
-from src.l2t_processor import L2TProcessor
-from src.l2t_dataclasses import (
+from src.l2t.processor import L2TProcessor
+from src.l2t.dataclasses import (
     L2TConfig,
     L2TResult,
     L2TGraph,
     L2TNodeCategory,
     L2TNode,
 )
-from src.aot_dataclasses import LLMCallStats
+from src.aot.dataclasses import LLMCallStats
 
 from src.llm_client import LLMClient
 from src.l2t_processor_utils.node_processor import NodeProcessor
 
 import logging
-logging.disable(logging.CRITICAL)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class TestL2TProcessor_MaxSteps(unittest.TestCase):
     def setUp(self):
@@ -28,14 +28,14 @@ class TestL2TProcessor_MaxSteps(unittest.TestCase):
             initial_prompt_model_names=["mock-initial"],
         )
 
-    @patch("src.l2t_processor.NodeProcessor")
-    @patch("src.l2t_response_parser.L2TResponseParser.parse_l2t_initial_response")
-    @patch("src.l2t_processor.LLMClient")
+    @patch("src.l2t.response_parser.L2TResponseParser.parse_l2t_initial_response")
+    @patch("src.l2t.processor.LLMClient") # Patch LLMClient where it's used in L2TProcessor
+    @patch("src.l2t.processor.NodeProcessor") # Patch NodeProcessor where it's used in L2TProcessor
     def test_run_max_steps_reached(
         self,
+        MockNodeProcessor,
         MockL2TProcessorLLMClient,
-        mock_parse_initial,
-        MockNodeProcessor
+        mock_parse_initial
     ):
         problem_text = "Test problem: Max steps."
         initial_thought_content = "Initial thought."
@@ -44,11 +44,14 @@ class TestL2TProcessor_MaxSteps(unittest.TestCase):
 
         stats = LLMCallStats(completion_tokens=1, prompt_tokens=1, call_duration_seconds=0.01)
 
+        # Set mock return values before processor instantiation
         MockL2TProcessorLLMClient.return_value.call.return_value = ("Mocked LLM Response", stats)
         mock_parse_initial.return_value = initial_thought_content
 
-        processor = L2TProcessor(api_key="mock_api_key", config=self.config)
-        mock_node_processor_instance = processor.node_processor
+        # Setup the _update_result_stats and process_node side effects before creating processor instance
+        mock_node_processor_instance = MockNodeProcessor.return_value
+        mock_node_processor_instance._update_result_stats = MagicMock()
+        mock_node_processor_instance.process_node = MagicMock()
 
         def process_node_side_effect_max_steps(*args, **kwargs):
             call_count = getattr(process_node_side_effect_max_steps, "call_count", 0)
@@ -80,36 +83,39 @@ class TestL2TProcessor_MaxSteps(unittest.TestCase):
                 result_obj.total_llm_interaction_time_seconds += stats.call_duration_seconds
         mock_node_processor_instance._update_result_stats.side_effect = mock_update_stats_effect
 
+        processor = L2TProcessor(api_key="mock_api_key", config=self.config)
+
         result = processor.run(problem_text)
 
         self.assertFalse(result.succeeded)
         self.assertIsNone(result.final_answer)
         self.assertIsNotNone(result.error_message)
-        self.assertIn("Max steps reached", result.error_message)
+        self.assertIsInstance(result.error_message, str)
+        self.assertTrue(result.error_message and "Max steps reached" in result.error_message)
         self.assertEqual(result.total_llm_calls, 1 + 4) # Initial + 4 calls from NodeProcessor
 
         graph = result.reasoning_graph
         self.assertIsNotNone(graph)
-        self.assertIsNotNone(graph.nodes)
-        self.assertEqual(len(graph.nodes), 3)
+        self.assertTrue(graph is not None)
+        self.assertEqual(len(graph.nodes) if graph else 0, 3)
         root_node_id = graph.root_node_id
         self.assertIsNotNone(root_node_id)
-        root_node = graph.get_node(root_node_id)
+        root_node = graph.get_node(root_node_id) if root_node_id else None
         self.assertIsNotNone(root_node)
         self.assertEqual(root_node.category, L2TNodeCategory.CONTINUE)
         self.assertIsNotNone(root_node.children_ids)
         self.assertEqual(len(root_node.children_ids), 1)
-        node1_id = root_node.children_ids[0]
+        node1_id = root_node.children_ids[0] if root_node.children_ids else None
         self.assertIsNotNone(node1_id)
-        node1 = graph.get_node(node1_id)
+        node1 = graph.get_node(node1_id) if node1_id else None
         self.assertIsNotNone(node1)
         self.assertEqual(node1.content, thought_step1_content)
         self.assertEqual(node1.category, L2TNodeCategory.CONTINUE)
         self.assertIsNotNone(node1.children_ids)
         self.assertEqual(len(node1.children_ids), 1)
-        node2_id = node1.children_ids[0]
+        node2_id = node1.children_ids[0] if node1.children_ids else None
         self.assertIsNotNone(node2_id)
-        node2 = graph.get_node(node2_id)
+        node2 = graph.get_node(node2_id) if node2_id else None
         self.assertIsNotNone(node2)
         self.assertEqual(node2.content, thought_step2_content)
         self.assertIsNone(node2.category)

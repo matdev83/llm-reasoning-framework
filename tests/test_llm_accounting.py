@@ -8,7 +8,7 @@ import requests # Added this import
 
 # Assuming llm_client is in src.llm_client
 from src.llm_client import LLMClient
-from src.aot_dataclasses import LLMCallStats # LLMClient returns this
+from src.aot.dataclasses import LLMCallStats # LLMClient returns this
 
 # Default DB name used by llm-accounting
 DB_NAME = "llm_accounting.db"
