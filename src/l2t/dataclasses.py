@@ -78,6 +78,23 @@ class L2TGraph:
         if node_id not in self.v_hist:
             self.v_hist.append(node_id)
 
+    def re_add_to_v_pres(self, node_id: str) -> None:
+        """
+        Ensures a node is in v_pres (unprocessed) and not in v_hist (processed).
+        Useful for backtracking where a parent node needs to be re-evaluated.
+        """
+        if node_id not in self.nodes:
+            raise ValueError(f"Node with id {node_id} not found in graph.")
+        
+        if node_id in self.v_hist:
+            self.v_hist.remove(node_id)
+        
+        if node_id not in self.v_pres:
+            self.v_pres.append(node_id)
+        
+        # Reset the node's category so it can be re-processed and re-classified
+        self.nodes[node_id].category = None
+
     def get_node(self, node_id: str) -> Optional[L2TNode]:
         return self.nodes.get(node_id)
 

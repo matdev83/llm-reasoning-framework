@@ -146,11 +146,17 @@ class NodeProcessor:
             )
         
         elif node_category == L2TNodeCategory.BACKTRACK:
-            logger.info(
-                f"Backtrack requested at node {node_to_classify.id}. Basic: Treating as TERMINATE_BRANCH for now."
-            )
-        
-        graph.move_to_hist(node_id_to_classify) # Move processed node from v_pres to v_hist
+            logger.info(f"Backtrack requested at node {node_to_classify.id}.")
+            parent_node = graph.get_parent(node_to_classify.id)
+            if parent_node:
+                # Re-add parent to v_pres to allow for new thought generation from that point
+                graph.re_add_to_v_pres(parent_node.id)
+                logger.info(f"Parent node {parent_node.id} re-added to v_pres for re-exploration.")
+            else:
+                logger.info(f"Node {node_to_classify.id} is a root node or has no parent. Cannot backtrack further.")
+            
+            # The current node that led to BACKTRACK is considered processed (unfruitful path)
+            graph.move_to_hist(node_id_to_classify)
 
     def _update_result_stats(self, result: L2TResult, stats: LLMCallStats):
         if stats:

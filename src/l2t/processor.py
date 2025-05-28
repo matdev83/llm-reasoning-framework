@@ -101,6 +101,8 @@ class L2TProcessor:
                 f"--- L2T Process Step {current_process_step}/{self.config.max_steps} --- "
                 f"V_pres size: {len(graph.v_pres)}, Total nodes: {len(graph.nodes)} ---"
             )
+            logger.debug(f"PROCESSOR: Start of step {current_process_step}. graph.v_pres: {list(graph.v_pres)}")
+
 
             nodes_to_process_this_round = list(graph.v_pres) # Iterate over a copy
 
@@ -109,12 +111,27 @@ class L2TProcessor:
                     break # Exit inner loop if final answer found
 
                 self.node_processor.process_node(node_id_to_classify, graph, result, current_process_step)
+                logger.debug(f"DEBUG: After processing {node_id_to_classify}. graph.v_pres: {list(graph.v_pres)}")
 
-            # Check if any new nodes were added to v_pres in this round.
-            if not graph.v_pres and result.final_answer is None:
+            # Check if final answer was found, or if any new nodes were added to v_pres in this round.
+            if result.final_answer is not None:
+                break # Exit outer while loop if final answer found
+
+            if not graph.v_pres: # Only check if v_pres is empty if no final answer was found
                 logger.info("No new thoughts generated in this step and no final answer. Terminating early.")
                 break # Keep termination_reason as None for now, let the final block determine it
         
+        # After loop: determine termination reason
+        # Prioritize max_steps if it was reached
+        if current_process_step >= self.config.max_steps and result.final_answer is None:
+            termination_reason = "max_steps"
+        elif len(graph.nodes) >= self.config.max_total_nodes and result.final_answer is None:
+            termination_reason = "max_total_nodes"
+        elif (time.monotonic() - process_start_time) >= self.config.max_time_seconds and result.final_answer is None:
+            termination_reason = "max_time"
+        elif result.final_answer is None: # If no other reason was met and no final answer
+            termination_reason = "no_more_thoughts"
+
         # After loop: determine termination reason
         # Prioritize max_steps if it was reached
         if current_process_step >= self.config.max_steps and result.final_answer is None:
