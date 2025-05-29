@@ -4,6 +4,13 @@ This document provides a chronological overview of the key development milestone
 
 ## Commit History
 
+### 4c79b22 - 2025-05-29 - docs: Restructure changelog and update project documentation
+**Changes:**
+- Modified CHANGELOG.md
+- Deleted docs/PROJECT_STRUCTURE.md
+- Added docs/STRUCTURE.md
+
+
 ### 98d4048 - 2025-05-29 - feat: Add CHANGELOG and update project structure documentation
 **Changes:**
 - Added CHANGELOG.md
