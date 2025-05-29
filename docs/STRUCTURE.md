@@ -9,10 +9,11 @@ This document outlines the directory and file structure of the Modular LLM Reaso
 *   `LICENSE`: Contains the project's licensing information (MIT License).
 *   `pyproject.toml`, `setup.py`, `requirements.txt`: Python project configuration, dependency management, and packaging metadata.
 *   `README.md`: Comprehensive project overview, key features, installation instructions, usage examples, CLI parameters, and development guidelines.
-*   `test_regex.py`: A utility script, likely for testing regular expressions used within the project.
+*   `CHANGELOG.md`: A chronological overview of the key development milestones, tasks, and significant refactors in this project.instructions, usage examples, CLI parameters, and development guidelines.
 *   `conf/`: Contains configuration files, prompt templates, and example user prompts.
+*   `context7-mcp/`: Contains MCP server configuration and tools for Context7 integration.
 *   `data/`: Stores runtime data, notably the `accounting.sqlite` database for LLM call auditing.
-*   `docs/`: Project documentation, including this file (`PROJECT_STRUCTURE.md`) and `l2t_paper.md`.
+*   `docs/`: Project documentation, including this file (`STRUCTURE.md`) and `l2t_paper.md`.
 *   `src/`: The core source code of the framework.
 *   `tests/`: Contains unit and integration tests for the project components.
 
@@ -103,7 +104,7 @@ This directory holds various configuration files and prompt templates.
 
 ## `docs/` - Documentation
 
-*   `PROJECT_STRUCTURE.md`: This document, detailing the project's file and directory structure.
+*   `STRUCTURE.md`: This document, detailing the project's file and directory structure.
 *   `l2t_paper.md`: Likely contains documentation or notes related to the "Learn to Think" concept.
 
 ## `tests/` - Test Suite
@@ -119,6 +120,7 @@ This directory contains the project's test suite, organized to mirror the `src/`
     *   `test_prompt_generator.py`: Tests for the L2T prompt generator.
     *   `test_response_parser.py`: Tests for the L2T response parser.
 *   `l2t_processor/`: Contains specific test cases for the L2T processor, covering various scenarios.
+    *   `test_backtrack_logic.py`: Tests the backtracking logic in the L2T processor.
     *   `test_initial_thought_generation_failure_llm_error.py`: Tests error handling during initial thought generation due to LLM errors.
     *   `test_initial_thought_generation_failure_parsing.py`: Tests error handling during initial thought generation due to parsing issues.
     *   `test_max_steps_reached.py`: Tests behavior when the maximum number of steps is reached.
