@@ -1,5 +1,5 @@
 import logging
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 from src.aot.dataclasses import LLMCallStats
 from src.aot.enums import AssessmentDecision
@@ -7,7 +7,6 @@ from src.llm_client import LLMClient
 from src.llm_config import LLMConfig # Added
 from src.prompt_generator import PromptGenerator
 from src.heuristic_detector import HeuristicDetector # Import the new class
-from typing import Optional # Import Optional
 
 logger = logging.getLogger(__name__)
 

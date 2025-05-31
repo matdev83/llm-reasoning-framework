@@ -2,32 +2,33 @@ import unittest
 import os
 import sqlite3
 import json
-from unittest.mock import patch, Mock, call # Added call here
-import time # Will be needed for mocking time.monotonic
-import requests # Added this import
+from unittest.mock import patch, Mock, call
+import time
+import requests
+import tempfile # Import tempfile
+import logging # Import logging for warnings
 
 # Assuming llm_client is in src.llm_client
-from src.llm_client import LLMClient
-from src.aot.dataclasses import LLMCallStats # LLMClient returns this
-from src.llm_config import LLMConfig # Added LLMConfig
+from src.llm_client import LLMClient, LLM_ACCOUNTING_AVAILABLE, SQLiteBackend # Import LLM_ACCOUNTING_AVAILABLE, SQLiteBackend
+from src.aot.dataclasses import LLMCallStats
+from src.llm_config import LLMConfig
+from typing import cast # Import cast
 
-# Default DB name used by llm-accounting
-DB_NAME = "llm_accounting.db"
+# DB_PATH will now be dynamic
+# DB_PATH = "data/audit_log.sqlite" # No longer needed as a global constant
 
 class TestLLMAccountingIntegration(unittest.TestCase):
 
     def setUp(self):
+        # Create a temporary file for the database
+        self.temp_db_file = tempfile.NamedTemporaryFile(delete=False, suffix=".sqlite").name
+        
         # Set a dummy API key for LLMClient initialization
         os.environ["OPENROUTER_API_KEY"] = "dummy_key_for_testing"
         # Ensure audit logging is enabled for the test client
-        self.llm_client = LLMClient(api_key="dummy_key_for_testing", enable_audit_logging=True)
-
-        # Ensure a clean slate for the database for each test
-        if os.path.exists(DB_NAME):
-            os.remove(DB_NAME)
-        
-        # The AuditLogger now manages its connection internally via the backend.
-        # Explicit connect() call is no longer needed.
+        # Pass the temporary db path to LLMClient
+        self.llm_client = LLMClient(api_key="dummy_key_for_testing", enable_audit_logging=True,
+                                     db_path=self.temp_db_file) # Add db_path parameter to LLMClient
 
         # Patch time.monotonic to control call_duration_seconds
         self.mock_monotonic_patch = patch('time.monotonic')
@@ -35,11 +36,20 @@ class TestLLMAccountingIntegration(unittest.TestCase):
         self.mock_monotonic.side_effect = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0] # Extended for failover test
 
     def tearDown(self):
-        # The AuditLogger now manages its connection internally via the backend.
-        # Explicit close() call is no longer needed.
-        # Clean up the database file after each test
-        if os.path.exists(DB_NAME):
-            os.remove(DB_NAME)
+        # Dispose of the SQLAlchemy engine to close all connections, only if llm_accounting is available
+        if LLM_ACCOUNTING_AVAILABLE and hasattr(self.llm_client, 'accounting') and \
+           hasattr(self.llm_client.accounting, 'backend'):
+            # Explicitly cast to SQLiteBackend to help type checker
+            backend = cast(SQLiteBackend, self.llm_client.accounting.backend)
+            if hasattr(backend, 'engine'):
+                backend.engine.dispose()
+        
+        # Clean up the temporary database file
+        if os.path.exists(self.temp_db_file):
+            try:
+                os.remove(self.temp_db_file)
+            except PermissionError:
+                logging.warning(f"Could not remove temporary DB file {self.temp_db_file} due to PermissionError.")
         del os.environ["OPENROUTER_API_KEY"]
         self.mock_monotonic_patch.stop()
 

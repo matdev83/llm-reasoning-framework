@@ -20,6 +20,7 @@ classifiers = [
 ]
 dependencies = [
     "openai",
+    "llm-accounting",
 ]
 
 [project.urls]

@@ -1,16 +1,20 @@
 import time
 import logging
 import io
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, TYPE_CHECKING
+
 from .dataclasses import LLMCallStats, ParsedLLMOutput, AoTRunnerConfig, AoTResult
-from src.llm_client import LLMClient
-from src.llm_config import LLMConfig # Added
 from src.prompt_generator import PromptGenerator
 from src.response_parser import ResponseParser
 from .constants import MIN_PREDICTED_STEP_TOKENS_FALLBACK, MIN_PREDICTED_STEP_DURATION_FALLBACK
 
+if TYPE_CHECKING:
+    from src.llm_client import LLMClient # For type hinting only
+
+from src.llm_config import LLMConfig # Added
+
 class AoTProcessor:
-    def __init__(self, llm_client: LLMClient, runner_config: AoTRunnerConfig, llm_config: LLMConfig): # Modified
+    def __init__(self, llm_client: 'LLMClient', runner_config: AoTRunnerConfig, llm_config: LLMConfig): # Modified
         self.llm_client = llm_client
         self.runner_config = runner_config # Modified
         self.llm_config = llm_config # Added
@@ -48,31 +52,31 @@ class AoTProcessor:
             if current_step_1_indexed > current_effective_max_steps:
                 logging.info(f"Current step {current_step_1_indexed} exceeds dynamically adjusted effective max steps ({current_effective_max_steps}). Stopping reasoning phase.")
                 reasoning_loop_broke_early = True; break
-            if elapsed_process_time >= self.runner_config.max_time_seconds: # MODIFIED
-                logging.info(f"Maximum process time limit ({self.runner_config.max_time_seconds}s) reached (overall wall-clock). Stopping reasoning phase.") # MODIFIED
+            if elapsed_process_time >= self.runner_config.max_time_seconds:
+                logging.info(f"Maximum process time limit ({self.runner_config.max_time_seconds}s) reached (overall wall-clock). Stopping reasoning phase.")
                 reasoning_loop_broke_early = True; break
 
             _affordable_total_steps_from_tokens_info = "N/A"
             _affordable_total_steps_from_time_info = "N/A"
 
-            if self.runner_config.max_reasoning_tokens and self.runner_config.max_reasoning_tokens > 0: # MODIFIED
+            if self.runner_config.max_reasoning_tokens and self.runner_config.max_reasoning_tokens > 0:
                 predicted_tokens_for_current_step = MIN_PREDICTED_STEP_TOKENS_FALLBACK
                 current_avg_token_delta = 0.0
                 if not step_completion_tokens_history:
-                    if original_configured_max_steps > 0: predicted_tokens_for_current_step = max(MIN_PREDICTED_STEP_TOKENS_FALLBACK, (self.runner_config.max_reasoning_tokens / original_configured_max_steps)) # MODIFIED
+                    if original_configured_max_steps > 0: predicted_tokens_for_current_step = max(MIN_PREDICTED_STEP_TOKENS_FALLBACK, (self.runner_config.max_reasoning_tokens / original_configured_max_steps))
                 else:
                     if len(step_completion_tokens_history) >= 2:
                         deltas = [step_completion_tokens_history[i] - step_completion_tokens_history[i-1] for i in range(1, len(step_completion_tokens_history))]
                         if deltas: current_avg_token_delta = sum(deltas) / len(deltas)
                     predicted_tokens_for_current_step = max(MIN_PREDICTED_STEP_TOKENS_FALLBACK, step_completion_tokens_history[-1] + current_avg_token_delta)
 
-                if result.reasoning_completion_tokens + predicted_tokens_for_current_step > self.runner_config.max_reasoning_tokens: # MODIFIED
-                    logging.info(f"[HARD STOP TOKENS] Predicted to exceed token limit ({self.runner_config.max_reasoning_tokens}) if current step {current_step_1_indexed} is taken. " # MODIFIED
+                if result.reasoning_completion_tokens + predicted_tokens_for_current_step > self.runner_config.max_reasoning_tokens:
+                    logging.info(f"[HARD STOP TOKENS] Predicted to exceed token limit ({self.runner_config.max_reasoning_tokens}) if current step {current_step_1_indexed} is taken. "
                                  f"Current usage: {result.reasoning_completion_tokens}, predicted: {predicted_tokens_for_current_step:.0f}. Stopping.")
                     reasoning_loop_broke_early = True; break
 
                 affordable_steps_by_token = 0
-                temp_token_budget = self.runner_config.max_reasoning_tokens - result.reasoning_completion_tokens # MODIFIED
+                temp_token_budget = self.runner_config.max_reasoning_tokens - result.reasoning_completion_tokens
                 cost_of_projected_token_step = predicted_tokens_for_current_step
                 max_proj_iter = original_configured_max_steps - current_step_1_indexed + 1
                 for _ in range(max_proj_iter):
@@ -91,8 +95,8 @@ class AoTProcessor:
                          logging.info(f"Current step {current_step_1_indexed} now exceeds token-adjusted effective max steps ({current_effective_max_steps}). Stopping.")
                          reasoning_loop_broke_early = True; break
 
-            if self.runner_config.max_time_seconds > 0: # MODIFIED
-                remaining_time_budget_for_steps = self.runner_config.max_time_seconds - elapsed_process_time # MODIFIED
+            if self.runner_config.max_time_seconds > 0:
+                remaining_time_budget_for_steps = self.runner_config.max_time_seconds - elapsed_process_time
                 predicted_duration_for_current_step = MIN_PREDICTED_STEP_DURATION_FALLBACK
                 current_avg_duration_delta = 0.0
                 if not step_call_duration_history:
@@ -131,11 +135,11 @@ class AoTProcessor:
                          reasoning_loop_broke_early = True; break
 
             step_info_extra = f", AffordTokens: {_affordable_total_steps_from_tokens_info}, AffordTime: {_affordable_total_steps_from_time_info}"
-            logging.info(f"--- Step {current_step_1_indexed}/{current_effective_max_steps} (OrigMax: {original_configured_max_steps}{step_info_extra}, ElapsedWallClock: {elapsed_process_time:.2f}s/{self.runner_config.max_time_seconds}s) ---") # MODIFIED
+            logging.info(f"--- Step {current_step_1_indexed}/{current_effective_max_steps} (OrigMax: {original_configured_max_steps}{step_info_extra}, ElapsedWallClock: {elapsed_process_time:.2f}s/{self.runner_config.max_time_seconds}s) ---")
 
             prompt = PromptGenerator.construct_aot_step_prompt(
                 problem_text, result.full_history_for_context, current_step_1_indexed,
-                current_effective_max_steps, original_configured_max_steps, self.runner_config.pass_remaining_steps_pct # MODIFIED
+                current_effective_max_steps, original_configured_max_steps, self.runner_config.pass_remaining_steps_pct
             )
             reply_content, step_stats = self.llm_client.call(
                 prompt, models=self.runner_config.main_model_names, config=self.llm_config # MODIFIED
@@ -151,7 +155,7 @@ class AoTProcessor:
             logging.debug(f"Response from {step_stats.model_name}:\n{reply_content}")
             logging.info(f"LLM call ({step_stats.model_name}): Duration: {step_stats.call_duration_seconds:.2f}s, Tokens (C:{step_stats.completion_tokens}, P:{step_stats.prompt_tokens})")
             logging.info(f"Cumulative reasoning completion tokens: {result.reasoning_completion_tokens}" +
-                         (f" / {self.runner_config.max_reasoning_tokens}" if self.runner_config.max_reasoning_tokens else "")) # MODIFIED
+                         (f" / {self.runner_config.max_reasoning_tokens}" if self.runner_config.max_reasoning_tokens else ""))
             logging.info(f"Cumulative LLM interaction time: {result.total_llm_interaction_time_seconds:.2f}s")
 
             if reply_content.startswith("Error:"):
@@ -183,8 +187,8 @@ class AoTProcessor:
                 no_progress_count += 1
                 logging.warning(f"No 'Current answer/state:' found in step output. No-progress count: {no_progress_count}")
 
-            if no_progress_count >= self.runner_config.no_progress_limit: # MODIFIED
-                logging.warning(f"No progress detected for {self.runner_config.no_progress_limit} consecutive steps. Stopping reasoning phase.") # MODIFIED
+            if no_progress_count >= self.runner_config.no_progress_limit:
+                logging.warning(f"No progress detected for {self.runner_config.no_progress_limit} consecutive steps. Stopping reasoning phase.")
                 reasoning_loop_broke_early = True; break
 
             time.sleep(0.2) # Shorter sleep, mainly for API courtesy if calls are rapid
@@ -195,11 +199,11 @@ class AoTProcessor:
         if not result.final_answer:
             logging.info("--- Generating Final Answer (Explicit AoT Call) ---")
             can_make_final_call = True
-            if self.runner_config.max_time_seconds > 0 and (self.runner_config.max_time_seconds - (time.monotonic() - process_start_time)) < MIN_PREDICTED_STEP_DURATION_FALLBACK * 1.5: # MODIFIED
+            if self.runner_config.max_time_seconds > 0 and (self.runner_config.max_time_seconds - (time.monotonic() - process_start_time)) < MIN_PREDICTED_STEP_DURATION_FALLBACK * 1.5: # Adjusted multiplier
                 logging.warning("Very low time budget remaining for final AoT call. Skipping.")
                 can_make_final_call = False
             if self.runner_config.max_reasoning_tokens and self.runner_config.max_reasoning_tokens > 0 and \
-               (self.runner_config.max_reasoning_tokens - result.reasoning_completion_tokens) < MIN_PREDICTED_STEP_TOKENS_FALLBACK * 1.5: # MODIFIED
+               (self.runner_config.max_reasoning_tokens - result.reasoning_completion_tokens) < MIN_PREDICTED_STEP_TOKENS_FALLBACK * 1.5: # Adjusted multiplier
                 logging.warning("Very low token budget remaining for final AoT call (for reasoning tokens). Skipping.")
                 can_make_final_call = False
 
