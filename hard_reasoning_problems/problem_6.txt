@@ -1,0 +1,16 @@
+**Problem 6: The Folded Paper Puzzle**
+
+**Domain:** Spatial Reasoning / Logic
+
+**Problem Statement:**
+
+Imagine a square piece of paper. It is folded exactly in half three times in a row.
+After these three folds, the resulting smaller, folded shape has all its original edges aligned (no skewing).
+Then, two circular holes are punched through the folded stack of paper. Both holes are punched in locations that pass through all layers of the paper.
+
+When the paper is completely unfolded, how many circular holes are visible on the original square piece of paper? Furthermore, describe the minimum and maximum possible number of distinct final patterns of circular holes you could observe on the unfolded paper, considering that the two punched holes could be placed in various positions on the folded stack (including overlapping or being coincident). A "pattern" is characterized by the number and arrangement of circular holes.
+
+**Task:**
+1.  State the total number of circular holes visible on the unfolded paper if the two punches on the folded stack are distinct and do not overlap.
+2.  Describe the pattern that results in the minimum number of circular holes on the unfolded paper, and state this minimum number.
+3.  Describe the pattern that results in the maximum number of circular holes on the unfolded paper, and state this maximum number.

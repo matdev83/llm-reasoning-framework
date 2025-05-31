@@ -1,0 +1,24 @@
+**Problem 9: The Rotating Matrix Code**
+
+**Domain:** Pattern Recognition / Spatial Reasoning
+
+**Problem Statement:**
+
+A 3x3 matrix of characters is used to generate a code. The code generation involves two steps:
+1.  **Transformation:** The matrix undergoes a specific sequence of three transformations:
+    *   T1: Rotate 90 degrees clockwise.
+    *   T2: Flip horizontally.
+    *   T3: Rotate 90 degrees counter-clockwise.
+2.  **Code Reading:** After the transformations, the code is read by concatenating the characters from left-to-right, top-to-bottom.
+
+You are given the final code: "**X3HMA1S2P**"
+
+And you know the initial state of the matrix before any transformations was:
+`A B C`
+`D E F`
+`G H I`
+
+Where A-I are unknown characters (but are represented by the characters appearing in the final code string). Your task is to determine the configuration of the initial matrix.
+
+**Task:**
+Reconstruct the initial 3x3 matrix of characters.

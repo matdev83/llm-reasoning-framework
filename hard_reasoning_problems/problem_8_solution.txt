@@ -1,0 +1,51 @@
+**Problem 8: The Autonomous Vehicle Dilemma - Solution and Reasoning**
+
+**Solution:**
+The AV should choose **Maneuver B (Swerve Right)**.
+
+**Reasoning Steps (following the P3 > P2 > P1 hierarchy):**
+
+1.  **Evaluate Each Maneuver Against the Principles:**
+
+    *   **Maneuver A (Swerve Left):**
+        *   P3 (Legality): Stated as illegal. **Violates P3.**
+        *   P2 (Protect Occupants): AV occupant suffers fatality (not protected).
+        *   P1 (Minimize Harm): Total harm = 10 (AV) + 20 (others) = 30 units.
+
+    *   **Maneuver B (Swerve Right):**
+        *   P3 (Legality): Stated as legal. **Complies with P3.**
+        *   P2 (Protect Occupants): AV occupant suffers minor injury (protected from fatality/major injury).
+        *   P1 (Minimize Harm): Total harm = 1 (AV) = 1 unit.
+
+    *   **Maneuver C (Stay in Lane):**
+        *   P3 (Legality): Stated as legal. **Complies with P3.**
+        *   P2 (Protect Occupants): AV occupant suffers fatality (not protected).
+        *   P1 (Minimize Harm): Total harm = 10 (AV) = 10 units.
+
+2.  **Apply Principle P3 (Uphold Legal Responsibility):**
+    *   Maneuver A violates P3 because it involves an illegal action (swerving into oncoming traffic). Therefore, Maneuver A is eliminated from consideration.
+    *   Maneuvers B and C comply with P3, as both are described as legal actions.
+    *   **Remaining valid options: {Maneuver B, Maneuver C}.**
+
+3.  **Apply Principle P2 (Protect Occupants) to the remaining valid options {B, C}:**
+    *   The hierarchy states: "If P2 yields a clear choice (one option demonstrably better protects occupants from severe harm compared to other options), that choice is made."
+    *   Maneuver B: Results in a minor injury for the AV occupant (1 unit of harm). This protects the occupant from fatality or major injury.
+    *   Maneuver C: Results in a fatality for the AV occupant (10 units of harm). This does not protect the occupant.
+    *   Comparing Maneuver B and Maneuver C, Maneuver B demonstrably better protects the occupant from severe harm (minor injury vs. fatality).
+    *   Therefore, Principle P2 leads to a clear choice: select Maneuver B.
+
+4.  **Apply Principle P1 (Minimize Harm) - (Only if P2 did not yield a clear choice):**
+    *   According to the hierarchy, since P2 provided a clear decision (select Maneuver B), the process concludes, and P1 is not needed to differentiate between Maneuver B and C.
+    *   For completeness, if P1 were applied to the P3-compliant options {B, C}:
+        *   Maneuver B total harm = 1 unit.
+        *   Maneuver C total harm = 10 units.
+        *   P1 would also select Maneuver B (1 unit < 10 units), which is consistent with the decision from P2.
+
+**Conclusion:**
+
+The decision process is as follows:
+1.  P3 eliminates Maneuver A.
+2.  P2 is then applied to the remaining options (B and C). Maneuver B clearly better protects the occupant (minor injury) compared to Maneuver C (fatality). Thus, Maneuver B is chosen.
+3.  P1 is not required as P2 resolved the choice.
+
+Therefore, the AV should choose **Maneuver B (Swerve Right)**.

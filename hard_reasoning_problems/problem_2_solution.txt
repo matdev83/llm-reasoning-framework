@@ -1,0 +1,72 @@
+**Problem 2: The Encrypted Sequence (Revised) - Solution and Reasoning**
+
+**Solution:**
+`M = 2`
+`K = 3`
+
+**Reasoning Steps:**
+
+1.  **Let the original sequence be `O = [o_1, o_2, o_3, ...]`**.
+    Given `O = [3, 7, 2]`. So, `o_1 = 3, o_2 = 7, o_3 = 2`.
+
+2.  **Apply Operation Alpha (A): `x -> x*M + K`**.
+    The sequence after Alpha, `S_A`, will be:
+    `S_A = [ (o_1*M + K), (o_2*M + K), (o_3*M + K) ]`
+    `S_A = [ (3M + K), (7M + K), (2M + K) ]`
+
+3.  **Apply Operation Beta (B): Reverse the sequence `S_A`**.
+    The sequence after Beta, `S_B`, will be:
+    `S_B = [ (2M + K), (7M + K), (3M + K) ]`
+    Let these elements be:
+    `s_B1 = 2M + K`
+    `s_B2 = 7M + K`
+    `s_B3 = 3M + K`
+
+4.  **Apply Operation Gamma (G): `s_new = s_{i+1} - s_i + K`**.
+    The sequence `S_B` has 3 elements, so Operation Gamma is applied.
+    The resulting sequence, `S_G`, will have `3-1=2` elements:
+    `sG_1 = s_B2 - s_B1 + K`
+    `sG_1 = (7M + K) - (2M + K) + K = 7M + K - 2M - K + K = 5M + K`
+
+    `sG_2 = s_B3 - s_B2 + K`
+    `sG_2 = (3M + K) - (7M + K) + K = 3M + K - 7M - K + K = -4M + K`
+
+    So, `S_G = [ (5M + K), (-4M + K) ]`.
+
+5.  **Equate `S_G` with the given Encrypted Sequence.**
+    The Encrypted Sequence is `[13, -5]`.
+    Therefore:
+    `5M + K = 13`  (Equation 1)
+    `-4M + K = -5` (Equation 2)
+
+6.  **Solve the system of linear equations for M and K.**
+    Subtract Equation 2 from Equation 1:
+    `(5M + K) - (-4M + K) = 13 - (-5)`
+    `5M + K + 4M - K = 13 + 5`
+    `9M = 18`
+    `M = 18 / 9`
+    `M = 2`
+
+7.  **Substitute the value of M back into one of the equations to find K.**
+    Using Equation 1:
+    `5(2) + K = 13`
+    `10 + K = 13`
+    `K = 13 - 10`
+    `K = 3`
+
+8.  **Verify the solution against the constraints.**
+    `M = 2`: Is a positive integer. `1 <= 2 <= 10`. This is valid.
+    `K = 3`: Is a positive integer. `1 <= 3 <= 10`. This is valid.
+
+9.  **Double-check with the values of M and K.**
+    If `M=2, K=3`:
+    `O = [3, 7, 2]`
+    `S_A = [3*2+3, 7*2+3, 2*2+3] = [6+3, 14+3, 4+3] = [9, 17, 7]`
+    `S_B = [7, 17, 9]`
+    `S_G`:
+    `sG_1 = (s_B2 - s_B1 + K) = (17 - 7) + 3 = 10 + 3 = 13`
+    `sG_2 = (s_B3 - s_B2 + K) = (9 - 17) + 3 = -8 + 3 = -5`
+    `S_G = [13, -5]`.
+    This matches the given Encrypted Sequence.
+
+The determined values `M=2` and `K=3` are correct and satisfy all conditions.

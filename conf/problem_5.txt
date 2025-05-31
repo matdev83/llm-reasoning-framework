@@ -1,0 +1,26 @@
+**Problem 5: The Optimal Commute**
+
+**Domain:** Economic Reasoning / Algorithmic Thinking
+
+**Problem Statement:**
+
+Alex needs to commute to work daily. Alex has three transportation options, each with a different time cost and monetary cost:
+
+1.  **Car (C):**
+    *   Time: 20 minutes (fixed, no traffic variability for this problem).
+    *   Monetary Cost: $3.00 per trip (fuel, wear and tear).
+2.  **Bus (B):**
+    *   Time: 45 minutes (fixed).
+    *   Monetary Cost: $1.50 per trip.
+3.  **Bicycle (K):**
+    *   Time: 60 minutes (fixed).
+    *   Monetary Cost: $0.20 per trip (maintenance).
+
+Alex values their time at $10 per hour. Alex makes one round trip (to work and back home) each workday. There are 20 workdays in a month.
+
+Alex has a monthly transportation budget of $80.00. Alex also wants to minimize their *total perceived cost* for the month, where total perceived cost is the sum of actual monetary costs and the monetary value of the time spent commuting.
+
+However, Alex has an additional constraint: to maintain a minimum level of physical activity, Alex wants to use the Bicycle for at least 25% of the total number of one-way trips in the month.
+
+**Task:**
+Determine the optimal combination of Car, Bus, and Bicycle trips Alex should make in a month (for one-way trips, noting a round trip is two one-way trips) to meet all constraints (budget, minimum bicycle usage) while minimizing the total perceived cost. Specify the number of one-way trips for each mode.
