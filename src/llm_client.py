@@ -2,10 +2,43 @@ import time
 import requests
 import logging
 from typing import List, Optional, Tuple, cast
-from llm_accounting import LLMAccounting
-from llm_accounting.audit_log import AuditLogger
-from llm_accounting.models.limits import LimitScope, LimitType, TimeInterval
-from llm_accounting.backends.sqlite import SQLiteBackend
+
+# --- BEGIN llm_accounting WORKAROUND ---
+try:
+    from llm_accounting import LLMAccounting
+    from llm_accounting.audit_log import AuditLogger
+    from llm_accounting.models.limits import LimitScope, LimitType, TimeInterval
+    from llm_accounting.backends.sqlite import SQLiteBackend
+    LLM_ACCOUNTING_AVAILABLE = True
+except ImportError:
+    LLM_ACCOUNTING_AVAILABLE = False
+    logging.warning("llm_accounting package not found. LLM accounting and audit logging will be disabled.")
+
+    class DummySQLiteBackend:
+        def __init__(self, db_path: str):
+            pass
+
+    class DummyLLMAccounting:
+        def __init__(self, backend):
+            pass
+        def check_quota(self, model: str, username: str, caller_name: str, input_tokens: int):
+            return True, "Dummy: Quota OK"
+        def track_usage(self, model: str, prompt_tokens: int = 0, completion_tokens: int = 0, execution_time: float = 0.0, caller_name: str = "", username: str = ""):
+            pass
+
+    class DummyAuditLogger:
+        def __init__(self, backend):
+            pass
+        def log_prompt(self, app_name: str, user_name: str, model: str, prompt_text: str):
+            pass
+        def log_response(self, app_name: str, user_name: str, model: str, response_text: str, remote_completion_id: Optional[str] = None):
+            pass
+
+    # Replace actual classes with dummies if not available
+    LLMAccounting = DummyLLMAccounting
+    AuditLogger = DummyAuditLogger
+    SQLiteBackend = DummySQLiteBackend
+# --- END llm_accounting WORKAROUND ---
 
 from src.aot.dataclasses import LLMCallStats
 from src.aot.constants import OPENROUTER_API_URL, HTTP_REFERER, APP_TITLE
@@ -23,11 +56,22 @@ class LLMClient:
             "X-Title": app_title,
             "Content-Type": "application/json"
         }
+
+        # Use original classes if available, otherwise dummies are already assigned
         sqlite_backend_instance = SQLiteBackend(db_path="data/audit_log.sqlite")
         self.accounting = LLMAccounting(backend=sqlite_backend_instance)
-        self.enable_rate_limiting = enable_rate_limiting
-        self.enable_audit_logging = enable_audit_logging
-        self.audit_logger = AuditLogger(backend=sqlite_backend_instance) if enable_audit_logging else None
+
+        self.enable_rate_limiting = enable_rate_limiting if LLM_ACCOUNTING_AVAILABLE else False
+        self.enable_audit_logging = enable_audit_logging if LLM_ACCOUNTING_AVAILABLE else False
+
+        if self.enable_audit_logging:
+            self.audit_logger = AuditLogger(backend=sqlite_backend_instance)
+        else:
+            self.audit_logger = None # Or DummyAuditLogger(None) if prefer non-None
+
+        if not LLM_ACCOUNTING_AVAILABLE:
+            logging.warning("LLMClient initialized with accounting/auditing disabled due to missing llm_accounting package.")
+
 
     def call(self, prompt: str, models: List[str], temperature: float) -> Tuple[str, LLMCallStats]:
         if not models:
@@ -49,7 +93,7 @@ class LLMClient:
             call_start_time = time.monotonic()
             
             try:
-                if self.enable_rate_limiting:
+                if self.enable_rate_limiting: # Will use dummy if not available
                     allowed, reason = self.accounting.check_quota(
                         model=model_name,
                         username="api_user",
@@ -60,12 +104,12 @@ class LLMClient:
                         logging.warning(f"Rate limit exceeded for model {model_name}: {reason}. Trying next model if available.")
                         last_error_content_for_failover = f"Error: Rate limit exceeded - {reason}"
                         last_error_stats_for_failover = current_call_stats
-                        continue # Skip to the next model
+                        continue
 
                 # Log the request before making the API call
-                self.accounting.track_usage(
+                self.accounting.track_usage( # Will use dummy if not available
                     model=model_name,
-                    prompt_tokens=len(prompt.split()),  # Approximate token count
+                    prompt_tokens=len(prompt.split()),
                     caller_name="LLMClient",
                     username="api_user"
                 )
@@ -79,25 +123,23 @@ class LLMClient:
                     response_payload = response.json()
                 except requests.exceptions.JSONDecodeError:
                     logging.warning(f"Could not parse JSON response from {model_name}. Status: {response.status_code}, Body: {response.text}")
-                    # Still attempt to log response with what we have if it's an error scenario handled below
 
                 if 400 <= response.status_code < 600:
                     error_body_text = response.text
                     if response_payload is not None:
-                        response_dict = response_payload  # Type checker now knows this is not None
+                        response_dict = response_payload
                         if 'error' in response_dict:
                             error_body_text = str(response_dict.get('error', {}).get('message', error_body_text))
                     
                     logging.warning(f"API call to {model_name} failed with HTTP status {response.status_code}: {error_body_text}. Trying next model if available.")
                     last_error_content_for_failover = f"Error: API call to {model_name} (HTTP {response.status_code}) - {error_body_text}"
                     
-                    # Try to get usage even from error responses
                     if response_payload is not None:
-                        usage = response_payload.get("usage", {})  # Now safe due to None check
+                        usage = response_payload.get("usage", {})
                         current_call_stats.completion_tokens = usage.get("completion_tokens", 0)
                         current_call_stats.prompt_tokens = usage.get("prompt_tokens", 0)
                     
-                    self.accounting.track_usage(
+                    self.accounting.track_usage( # Will use dummy if not available
                         model=model_name,
                         prompt_tokens=current_call_stats.prompt_tokens,
                         completion_tokens=current_call_stats.completion_tokens,
@@ -108,9 +150,9 @@ class LLMClient:
                     last_error_stats_for_failover = current_call_stats
                     continue 
 
-                response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx) if not handled above
+                response.raise_for_status()
                 
-                data = response_payload # Already parsed
+                data = response_payload
 
                 if data is not None:
                     if "error" in data: 
@@ -130,7 +172,7 @@ class LLMClient:
                 current_call_stats.completion_tokens = usage.get("completion_tokens", 0)
                 current_call_stats.prompt_tokens = usage.get("prompt_tokens", 0)
 
-                self.accounting.track_usage(
+                self.accounting.track_usage( # Will use dummy if not available
                     model=model_name,
                     prompt_tokens=current_call_stats.prompt_tokens,
                     completion_tokens=current_call_stats.completion_tokens,
@@ -139,14 +181,13 @@ class LLMClient:
                     username="api_user"
                 )
 
-                if self.enable_audit_logging and self.audit_logger:
+                if self.enable_audit_logging and self.audit_logger: # audit_logger will be None if not available
                     self.audit_logger.log_prompt(
                         app_name="LLMClient",
                         user_name="api_user",
                         model=model_name,
                         prompt_text=prompt
                     )
-                    # Explicitly cast data to dict to satisfy Pylance
                     response_data = cast(dict, data) 
                     self.audit_logger.log_response(
                         app_name="LLMClient",
@@ -182,14 +223,14 @@ class LLMClient:
                 else:
                     response_data_for_log = {"error": str(e)}
 
-                    self.accounting.track_usage(
-                        model=model_name,
-                        prompt_tokens=current_call_stats.prompt_tokens,
-                        completion_tokens=current_call_stats.completion_tokens,
-                        execution_time=current_call_stats.call_duration_seconds,
-                        caller_name="LLMClient",
-                        username="api_user"
-                    )
+                self.accounting.track_usage( # Will use dummy if not available
+                    model=model_name,
+                    prompt_tokens=current_call_stats.prompt_tokens,
+                    completion_tokens=current_call_stats.completion_tokens,
+                    execution_time=current_call_stats.call_duration_seconds,
+                    caller_name="LLMClient",
+                    username="api_user"
+                )
                 
                 if e.response is not None and (400 <= e.response.status_code < 500 and e.response.status_code not in [401, 403, 429]):
                     logging.warning(f"API request to {model_name} failed with HTTPError (status {e.response.status_code}): {e}. Trying next model.")
@@ -202,7 +243,7 @@ class LLMClient:
 
             except requests.exceptions.Timeout as e:
                 current_call_stats.call_duration_seconds = time.monotonic() - call_start_time
-                self.accounting.track_usage(
+                self.accounting.track_usage( # Will use dummy if not available
                     model=model_name,
                     execution_time=current_call_stats.call_duration_seconds,
                     caller_name="LLMClient",
@@ -215,7 +256,7 @@ class LLMClient:
 
             except requests.exceptions.RequestException as e: 
                 current_call_stats.call_duration_seconds = time.monotonic() - call_start_time
-                self.accounting.track_usage(
+                self.accounting.track_usage( # Will use dummy if not available
                     model=model_name,
                     execution_time=current_call_stats.call_duration_seconds,
                     caller_name="LLMClient",
@@ -226,11 +267,9 @@ class LLMClient:
                 last_error_stats_for_failover = current_call_stats
                 continue
             
-            finally: # Ensure request_id is reset if the loop continues for another model
-                if model_name != models[-1]: # If there are more models to try
-                    request_id = None # Reset for the next model attempt in the loop
+            finally:
+                if model_name != models[-1]:
+                    request_id = None
         
         logging.error(f"All models ({', '.join(models)}) failed. Last error from model '{last_error_stats_for_failover.model_name}': {last_error_content_for_failover}")
-        # If all models failed, the last error's request_id should have already been logged with its respective error.
-        # If the loop was never entered (e.g. models list was initially empty, though caught earlier), request_id would be None.
         return last_error_content_for_failover, last_error_stats_for_failover

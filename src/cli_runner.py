@@ -2,16 +2,17 @@ import sys
 import os
 import argparse
 import logging
-from typing import Optional
+from typing import Optional, Union # Added Union
 
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from src.llm_client import LLMClient
+
 from src.aot.enums import AotTriggerMode
-from src.aot.dataclasses import AoTRunnerConfig
+from src.aot.dataclasses import AoTRunnerConfig, Solution as AoTSolution
 from src.aot.orchestrator import InteractiveAoTOrchestrator
-from src.aot.processor import AoTProcessor
-from src.l2t.enums import L2TTriggerMode
+from src.aot.processor import AoTProcessor as DirectAoTProcessor
 from src.aot.constants import (
     DEFAULT_MAIN_MODEL_NAMES as DEFAULT_AOT_MAIN_MODEL_NAMES, 
     DEFAULT_SMALL_MODEL_NAMES as DEFAULT_AOT_ASSESSMENT_MODEL_NAMES, 
@@ -19,12 +20,13 @@ from src.aot.constants import (
     DEFAULT_MAX_TIME_SECONDS as DEFAULT_AOT_MAX_TIME_SECONDS, 
     DEFAULT_NO_PROGRESS_LIMIT as DEFAULT_AOT_NO_PROGRESS_LIMIT, 
     DEFAULT_MAIN_TEMPERATURE as DEFAULT_AOT_MAIN_TEMPERATURE, 
-    DEFAULT_ASSESSMENT_TEMPERATURE as DEFAULT_AOT_ASSESSMENT_TEMPERATURE 
+    DEFAULT_ASSESSMENT_TEMPERATURE as DEFAULT_AOT_ASSESSMENT_TEMPERATURE
 )
 
+from src.l2t.enums import L2TTriggerMode
 from src.l2t.orchestrator import L2TOrchestrator
-from src.l2t.processor import L2TProcessor
-from src.l2t.dataclasses import L2TConfig, L2TSolution # L2TSolution for direct L2TProcess
+from src.l2t.processor import L2TProcessor as DirectL2TProcessor
+from src.l2t.dataclasses import L2TConfig, L2TSolution
 from src.l2t_orchestrator_utils.summary_generator import L2TSummaryGenerator
 from src.l2t.constants import (
     DEFAULT_L2T_CLASSIFICATION_MODEL_NAMES,
@@ -40,32 +42,62 @@ from src.l2t.constants import (
     DEFAULT_L2T_X_EVA_DEFAULT,
 )
 
+# Hybrid Process Imports
+from src.hybrid.enums import HybridTriggerMode
+from src.hybrid.orchestrator import HybridOrchestrator, HybridProcess
+from src.hybrid.dataclasses import HybridConfig, HybridSolution
+from src.hybrid.constants import (
+    DEFAULT_HYBRID_REASONING_MODEL_NAMES,
+    DEFAULT_HYBRID_RESPONSE_MODEL_NAMES,
+    DEFAULT_HYBRID_REASONING_TEMPERATURE,
+    DEFAULT_HYBRID_RESPONSE_TEMPERATURE,
+    DEFAULT_HYBRID_REASONING_PROMPT_TEMPLATE,
+    DEFAULT_HYBRID_REASONING_COMPLETE_TOKEN,
+    DEFAULT_HYBRID_RESPONSE_PROMPT_TEMPLATE,
+    DEFAULT_HYBRID_MAX_REASONING_TOKENS,
+    DEFAULT_HYBRID_MAX_RESPONSE_TOKENS,
+    DEFAULT_HYBRID_ASSESSMENT_MODEL_NAMES,
+    DEFAULT_HYBRID_ASSESSMENT_TEMPERATURE,
+    DEFAULT_HYBRID_ONESHOT_MODEL_NAMES,
+    DEFAULT_HYBRID_ONESHOT_TEMPERATURE,
+)
+from src.heuristic_detector import HeuristicDetector # For initializing if used
+
+
 # Helper to define new direct processing modes
 DIRECT_AOT_MODE = "aot_direct"
 DIRECT_L2T_MODE = "l2t_direct"
+DIRECT_HYBRID_MODE = "hybrid_direct"
 
 def main():
     parser = argparse.ArgumentParser(
-        description="CLI Runner for Algorithm of Thought (AoT) and Learn-to-Think (L2T) processes.",
+        description="CLI Runner for Algorithm of Thought (AoT), Learn-to-Think (L2T), and Hybrid reasoning processes.",
         formatter_class=argparse.RawTextHelpFormatter
     )
     problem_group = parser.add_mutually_exclusive_group(required=True)
     problem_group.add_argument("--problem", "-p", type=str, help="Problem/question to solve.")
     problem_group.add_argument("--problem-filename", type=str, help="File containing the problem.")
 
-    # General arguments
-    all_modes = [mode.value for mode in AotTriggerMode] + ["l2t", DIRECT_AOT_MODE, DIRECT_L2T_MODE]
+    aot_trigger_mode_values = [mode.value for mode in AotTriggerMode]
+    hybrid_trigger_mode_values = [mode.value for mode in HybridTriggerMode]
+
+    all_modes = sorted(list(set(
+        aot_trigger_mode_values +
+        ["l2t"] +
+        hybrid_trigger_mode_values +
+        [DIRECT_AOT_MODE, DIRECT_L2T_MODE, DIRECT_HYBRID_MODE]
+    )))
+
     parser.add_argument(
         "--processing-mode", "--mode", dest="processing_mode", type=str,
         choices=all_modes,
         default=AotTriggerMode.ASSESS_FIRST.value,
         help=(f"Processing mode (default: {AotTriggerMode.ASSESS_FIRST.value}).\n"
-              f" '{AotTriggerMode.ALWAYS_AOT.value}': Use InteractiveAoTOrchestrator (forces AoT path).\n"
-              f" '{AotTriggerMode.ASSESS_FIRST.value}': Use InteractiveAoTOrchestrator (assess, then AoT or ONESHOT).\n"
-              f" '{AotTriggerMode.NEVER_AOT.value}': Use InteractiveAoTOrchestrator (forces ONESHOT).\n"
-              f" '{DIRECT_AOT_MODE}': Directly run AoTProcess.\n"
-              f" 'l2t': Use L2TOrchestrator (which internally uses L2TProcess).\n"
-              f" '{DIRECT_L2T_MODE}': Directly run L2TProcess.")
+              f"Available modes: {', '.join(all_modes)}\n"
+              f"  AoT Modes (use InteractiveAoTOrchestrator): {', '.join(aot_trigger_mode_values)}\n"
+              f"  L2T Mode (uses L2TOrchestrator): 'l2t'\n"
+              f"  Hybrid Modes (use HybridOrchestrator): {', '.join(hybrid_trigger_mode_values)}\n"
+              f"  Direct Process Modes: '{DIRECT_AOT_MODE}', '{DIRECT_L2T_MODE}', '{DIRECT_HYBRID_MODE}'")
     )
 
     parser.add_argument("--enable-rate-limiting", action="store_true",
@@ -74,7 +106,7 @@ def main():
                         help="Enable audit logging for LLM prompts and responses.")
 
     # AoT Configuration Group
-    aot_group = parser.add_argument_group('AoT Process Configuration (used if processing-mode is AoT-related or aot_direct)')
+    aot_group = parser.add_argument_group('AoT Process Configuration')
     aot_group.add_argument("--aot-main-models", type=str, nargs='+', default=DEFAULT_AOT_MAIN_MODEL_NAMES,
                            help=f"Main LLM(s) for AoT/ONESHOT. Default: {' '.join(DEFAULT_AOT_MAIN_MODEL_NAMES)}")
     aot_group.add_argument("--aot-main-temp", type=float, default=DEFAULT_AOT_MAIN_TEMPERATURE,
@@ -97,7 +129,7 @@ def main():
                            help="Disable the local heuristic analysis for AoT complexity assessment, always using the LLM for assessment.")
 
     # L2T Configuration Group
-    l2t_group = parser.add_argument_group('L2T Process Configuration (used if processing-mode is l2t or l2t_direct)')
+    l2t_group = parser.add_argument_group('L2T Process Configuration')
     l2t_group.add_argument("--l2t-classification-models", type=str, nargs='+', default=DEFAULT_L2T_CLASSIFICATION_MODEL_NAMES,
                            help=f"L2T classification model(s). Default: {' '.join(DEFAULT_L2T_CLASSIFICATION_MODEL_NAMES)}")
     l2t_group.add_argument("--l2t-thought-gen-models", type=str, nargs='+', default=DEFAULT_L2T_THOUGHT_GENERATION_MODEL_NAMES,
@@ -120,7 +152,38 @@ def main():
                            help="L2T default format constraints string.")
     l2t_group.add_argument("--l2t-x-eva", dest="l2t_x_eva_default", type=str, default=DEFAULT_L2T_X_EVA_DEFAULT,
                            help="L2T default evaluation criteria string.")
-    
+
+    # Hybrid Configuration Group
+    hybrid_group = parser.add_argument_group('Hybrid Process Configuration')
+    hybrid_group.add_argument("--hybrid-reasoning-models", type=str, nargs='+', default=DEFAULT_HYBRID_REASONING_MODEL_NAMES,
+                               help=f"Reasoning LLM(s) for Hybrid process. Default: {' '.join(DEFAULT_HYBRID_REASONING_MODEL_NAMES)}")
+    hybrid_group.add_argument("--hybrid-reasoning-temp", type=float, default=DEFAULT_HYBRID_REASONING_TEMPERATURE,
+                               help=f"Temperature for Hybrid reasoning LLM(s). Default: {DEFAULT_HYBRID_REASONING_TEMPERATURE}")
+    hybrid_group.add_argument("--hybrid-response-models", type=str, nargs='+', default=DEFAULT_HYBRID_RESPONSE_MODEL_NAMES,
+                               help=f"Response LLM(s) for Hybrid process. Default: {' '.join(DEFAULT_HYBRID_RESPONSE_MODEL_NAMES)}")
+    hybrid_group.add_argument("--hybrid-response-temp", type=float, default=DEFAULT_HYBRID_RESPONSE_TEMPERATURE,
+                               help=f"Temperature for Hybrid response LLM(s). Default: {DEFAULT_HYBRID_RESPONSE_TEMPERATURE}")
+    hybrid_group.add_argument("--hybrid-reasoning-prompt", type=str, default=DEFAULT_HYBRID_REASONING_PROMPT_TEMPLATE,
+                               help="Prompt template for Hybrid reasoning stage.")
+    hybrid_group.add_argument("--hybrid-reasoning-token", type=str, default=DEFAULT_HYBRID_REASONING_COMPLETE_TOKEN,
+                               help="Token indicating completion of reasoning in Hybrid.")
+    hybrid_group.add_argument("--hybrid-response-prompt", type=str, default=DEFAULT_HYBRID_RESPONSE_PROMPT_TEMPLATE,
+                               help="Prompt template for Hybrid response stage.")
+    hybrid_group.add_argument("--hybrid-max-reasoning-tokens", type=int, default=DEFAULT_HYBRID_MAX_REASONING_TOKENS,
+                               help=f"Max tokens for Hybrid reasoning stage. Default: {DEFAULT_HYBRID_MAX_REASONING_TOKENS}")
+    hybrid_group.add_argument("--hybrid-max-response-tokens", type=int, default=DEFAULT_HYBRID_MAX_RESPONSE_TOKENS,
+                               help=f"Max tokens for Hybrid response stage. Default: {DEFAULT_HYBRID_MAX_RESPONSE_TOKENS}")
+    hybrid_group.add_argument("--hybrid-assess-models", type=str, nargs='+', default=DEFAULT_HYBRID_ASSESSMENT_MODEL_NAMES,
+                               help=f"Assessment LLM(s) for Hybrid (if assess_first). Default: {' '.join(DEFAULT_HYBRID_ASSESSMENT_MODEL_NAMES)}")
+    hybrid_group.add_argument("--hybrid-assess-temp", type=float, default=DEFAULT_HYBRID_ASSESSMENT_TEMPERATURE,
+                               help=f"Temperature for Hybrid assessment LLM(s). Default: {DEFAULT_HYBRID_ASSESSMENT_TEMPERATURE}")
+    hybrid_group.add_argument("--hybrid-oneshot-models", type=str, nargs='+', default=DEFAULT_HYBRID_ONESHOT_MODEL_NAMES,
+                               help=f"Fallback one-shot LLM(s) for Hybrid. Default: {' '.join(DEFAULT_HYBRID_ONESHOT_MODEL_NAMES)}")
+    hybrid_group.add_argument("--hybrid-oneshot-temp", type=float, default=DEFAULT_HYBRID_ONESHOT_TEMPERATURE,
+                               help=f"Temperature for Hybrid fallback one-shot. Default: {DEFAULT_HYBRID_ONESHOT_TEMPERATURE}")
+    hybrid_group.add_argument("--hybrid-disable-heuristic", action="store_true",
+                           help="Disable the local heuristic analysis for Hybrid complexity assessment, always using the LLM for assessment.")
+
     args = parser.parse_args()
 
     log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -136,7 +199,7 @@ def main():
         logging.critical("OPENROUTER_API_KEY environment variable not set.")
         sys.exit(1)
     
-    llm_client = LLMClient(
+    shared_llm_client = LLMClient(
         api_key=api_key,
         enable_rate_limiting=args.enable_rate_limiting,
         enable_audit_logging=args.enable_audit_logging
@@ -152,15 +215,24 @@ def main():
             sys.exit(1)
     else: 
         problem_text = args.problem
-        if not problem_text: # Should be caught by parser group, but defensive check
+        if not problem_text:
             logging.critical("No problem text provided.")
             sys.exit(1)
 
     current_processing_mode = args.processing_mode
-    solution = None
+    solution: Optional[Union[AoTSolution, L2TSolution, HybridSolution]] = None
     overall_summary_str = ""
 
-    # Prepare AoT configuration (used by InteractiveAoTOrchestrator and direct AoTProcess)
+    heuristic_detector_instance: Optional[HeuristicDetector] = None
+    needs_heuristic_detector = False
+    if (current_processing_mode == AotTriggerMode.ASSESS_FIRST.value and not args.aot_disable_heuristic) or \
+       (current_processing_mode == HybridTriggerMode.ASSESS_FIRST_HYBRID.value and not args.hybrid_disable_heuristic) or \
+       (current_processing_mode == "l2t"):
+        needs_heuristic_detector = True
+
+    if needs_heuristic_detector:
+        heuristic_detector_instance = HeuristicDetector()
+
     aot_pass_remaining_steps_float: Optional[float] = None
     if args.aot_pass_remaining_steps_pct is not None:
         aot_pass_remaining_steps_float = args.aot_pass_remaining_steps_pct / 100.0
@@ -175,7 +247,6 @@ def main():
         pass_remaining_steps_pct=aot_pass_remaining_steps_float
     )
 
-    # Prepare L2T configuration (used by L2TOrchestrator and direct L2TProcess)
     l2t_config = L2TConfig(
         classification_model_names=args.l2t_classification_models,
         thought_generation_model_names=args.l2t_thought_gen_models,
@@ -190,94 +261,128 @@ def main():
         x_eva_default=args.l2t_x_eva_default,
     )
 
+    hybrid_config = HybridConfig(
+        reasoning_model_name=args.hybrid_reasoning_models[0],
+        reasoning_model_temperature=args.hybrid_reasoning_temp,
+        reasoning_prompt_template=args.hybrid_reasoning_prompt,
+        reasoning_complete_token=args.hybrid_reasoning_token,
+        response_model_name=args.hybrid_response_models[0],
+        response_model_temperature=args.hybrid_response_temp,
+        response_prompt_template=args.hybrid_response_prompt,
+        max_reasoning_tokens=args.hybrid_max_reasoning_tokens,
+        max_response_tokens=args.hybrid_max_response_tokens
+    )
+
     if current_processing_mode == DIRECT_AOT_MODE:
-        logging.info(f"Direct AoTProcess mode selected.")
-        # Direct AoTProcess instantiation and execution
-        aot_process = AoTProcessor(
-            llm_client=llm_client,
+        logging.info("Direct AoT Processor mode selected.")
+        aot_direct_processor = DirectAoTProcessor(
+            llm_client=shared_llm_client,
             config=aot_runner_config
         )
-        aot_result, overall_summary_str = aot_process.run(problem_text)
-        solution = aot_result
-        
-        print("\nDirect AoTProcess Execution Summary:")
+        aot_result_data, processor_summary_str = aot_direct_processor.run(problem_text)
+        solution = AoTSolution(aot_result=aot_result_data, final_answer=aot_result_data.final_answer, reasoning_trace=aot_result_data.reasoning_trace, aot_summary_output=processor_summary_str)
+        overall_summary_str = processor_summary_str
+        print("\nDirect AoT Processor Execution Summary:")
         print(overall_summary_str if overall_summary_str else "No summary returned.")
-        
-        # Assuming solution is of type Solution from aot_dataclasses for direct AoT
-        if solution and solution.final_answer:
-            logging.info("Direct AoTProcess completed successfully.")
-        else:
-            logging.error("Direct AoTProcess did not produce a final answer or solution object.")
+        if not (solution and solution.final_answer):
+            error_detail = solution.aot_result.final_answer if solution and solution.aot_result and not solution.aot_result.succeeded else "Unknown error"
+            logging.error(f"Direct AoT Processor did not produce a final answer. Error: {error_detail}")
             sys.exit(1)
 
     elif current_processing_mode == DIRECT_L2T_MODE:
-        logging.info(f"Direct L2TProcess mode selected.")
-        # Direct L2TProcess instantiation and execution
-        l2t_process = L2TProcessor(
+        logging.info("Direct L2T Processor mode selected.")
+        l2t_direct_processor = DirectL2TProcessor(
             api_key=api_key,
             config=l2t_config,
             enable_rate_limiting=args.enable_rate_limiting,
             enable_audit_logging=args.enable_audit_logging
         )
-        l2t_result = l2t_process.run(problem_text)
-        
-        # Generate summary using L2TSummaryGenerator
-        summary_generator = L2TSummaryGenerator(
-            trigger_mode=L2TTriggerMode.ALWAYS_L2T, # This is for direct L2TProcess, so always L2T
-            use_heuristic_shortcut=False # Not applicable for direct L2TProcess
-        )
-        overall_summary_str = summary_generator.generate_l2t_summary_from_result(l2t_result)
-        
-        # Create an L2TSolution object for consistency with other branches
-        solution = L2TSolution(l2t_result=l2t_result, final_answer=l2t_result.final_answer)
-
-        print("\nDirect L2TProcess Execution Summary:")
+        l2t_result_data = l2t_direct_processor.run(problem_text)
+        summary_generator = L2TSummaryGenerator(trigger_mode=L2TTriggerMode.ALWAYS_L2T, use_heuristic_shortcut=False)
+        overall_summary_str = summary_generator.generate_l2t_summary_from_result(l2t_result_data)
+        solution = L2TSolution(l2t_result=l2t_result_data, final_answer=l2t_result_data.final_answer)
+        print("\nDirect L2T Processor Execution Summary:")
         print(overall_summary_str if overall_summary_str else "No summary returned.")
+        if not (solution and solution.final_answer):
+            error_detail = solution.l2t_result.error_message if solution and solution.l2t_result else "Unknown error"
+            logging.error(f"Direct L2T Processor did not produce a final answer. Error: {error_detail}")
+            sys.exit(1)
 
-        if solution and solution.final_answer: # Assuming solution is L2TSolution
-             logging.info("Direct L2TProcess completed successfully.")
-        else:
-            logging.error("Direct L2TProcess did not produce a final answer or solution object.")
-            # Error message might be in solution.l2t_result.error_message if it's an L2TSolution
-            if solution and solution.l2t_result and solution.l2t_result.error_message:
-                logging.error(f"L2TProcess error: {solution.l2t_result.error_message}")
+    elif current_processing_mode == DIRECT_HYBRID_MODE:
+        logging.info("Direct HybridProcess mode selected.")
+        hybrid_direct_process = HybridProcess(
+            hybrid_config=hybrid_config,
+            direct_oneshot_model_names=args.hybrid_oneshot_models,
+            direct_oneshot_temperature=args.hybrid_oneshot_temp,
+            api_key=api_key,
+            enable_rate_limiting=args.enable_rate_limiting,
+            enable_audit_logging=args.enable_audit_logging
+        )
+        hybrid_direct_process.execute(problem_description=problem_text, model_name="direct_hybrid")
+        solution, overall_summary_str = hybrid_direct_process.get_result()
+        print("\nDirect HybridProcess Execution Summary:")
+        print(overall_summary_str if overall_summary_str else "No summary from HybridProcess.")
+        if not (solution and solution.final_answer):
+            error_detail = solution.hybrid_result.error_message if solution and solution.hybrid_result else "Unknown error"
+            logging.error(f"Direct HybridProcess did not produce a final answer. Error: {error_detail}")
             sys.exit(1)
 
     elif current_processing_mode == "l2t":
         logging.info("L2TOrchestrator mode selected.")
         l2t_orchestrator = L2TOrchestrator(
-            trigger_mode=L2TTriggerMode.ALWAYS_L2T, # L2TOrchestrator handles this
+            trigger_mode=L2TTriggerMode.ALWAYS_L2T,
             l2t_config=l2t_config,
-            # Parameters for L2TOrchestrator's own fallback/assessment if it had one,
-            # or for passing to L2TProcess for its fallback.
             direct_oneshot_model_names=args.l2t_initial_prompt_models, 
             direct_oneshot_temperature=args.l2t_initial_prompt_temperature,
-            # Assessment params for L2TOrchestrator if it were to use ASSESS_FIRST for L2T
             assessment_model_names=args.l2t_classification_models, 
             assessment_temperature=args.l2t_classification_temperature, 
             api_key=api_key,
             use_heuristic_shortcut=True, 
-            heuristic_detector=None, 
+            heuristic_detector=heuristic_detector_instance,
             enable_rate_limiting=args.enable_rate_limiting,
             enable_audit_logging=args.enable_audit_logging
         )
         solution, overall_summary_str = l2t_orchestrator.solve(problem_text)
-        
         print("\nL2T Orchestrator Process Summary:")
         print(overall_summary_str)
-
-        # solution here is L2TSolution
-        if solution and solution.l2t_result and not solution.l2t_result.succeeded:
-            logging.error(f"L2T process (via orchestrator) did not succeed. Error: {solution.l2t_result.error_message if solution.l2t_result.error_message else 'Unknown error'}")
-            sys.exit(1)
-        elif solution and solution.final_answer:
-            logging.info("L2T process (via orchestrator) completed successfully.")
-        else:
-            logging.error("L2T process (via orchestrator) did not produce a final answer.")
+        if not (solution and solution.final_answer):
+            error_detail = "Unknown error"
+            if solution and solution.l2t_result and solution.l2t_result.error_message: error_detail = solution.l2t_result.error_message
+            elif solution and solution.l2t_result and not solution.l2t_result.succeeded: error_detail = "L2T process reported failure without specific message."
+            logging.error(f"L2T process (via orchestrator) did not produce a final answer or did not succeed. Error: {error_detail}")
             sys.exit(1)
 
+    elif current_processing_mode in hybrid_trigger_mode_values:
+        try:
+            hybrid_mode_enum_val = HybridTriggerMode(current_processing_mode)
+        except ValueError:
+            logging.critical(f"Invalid Hybrid mode string '{current_processing_mode}' for Hybrid Orchestrator. Exiting.")
+            sys.exit(1)
 
-    else: # AoT modes handled by InteractiveAoTOrchestrator (assess, always_aot, never_aot)
+        logging.info(f"HybridOrchestrator mode selected: {hybrid_mode_enum_val}")
+        hybrid_orchestrator = HybridOrchestrator(
+            trigger_mode=hybrid_mode_enum_val,
+            hybrid_config=hybrid_config,
+            direct_oneshot_model_names=args.hybrid_oneshot_models,
+            direct_oneshot_temperature=args.hybrid_oneshot_temp,
+            assessment_model_names=args.hybrid_assess_models,
+            assessment_temperature=args.hybrid_assess_temp,
+            api_key=api_key,
+            use_heuristic_shortcut=not args.hybrid_disable_heuristic,
+            heuristic_detector=heuristic_detector_instance,
+            enable_rate_limiting=args.enable_rate_limiting,
+            enable_audit_logging=args.enable_audit_logging
+        )
+        solution, overall_summary_str = hybrid_orchestrator.solve(problem_text)
+        print("\nHybrid Orchestrator Summary:")
+        print(overall_summary_str)
+        if not (solution and solution.final_answer):
+            error_detail = "Unknown error"
+            if solution and solution.hybrid_result and solution.hybrid_result.error_message: error_detail = solution.hybrid_result.error_message
+            logging.error(f"Hybrid Orchestrator process did not produce a final answer. Error: {error_detail}")
+            if hybrid_mode_enum_val != HybridTriggerMode.NEVER_HYBRID: sys.exit(1)
+
+    elif current_processing_mode in aot_trigger_mode_values:
         try:
             aot_mode_enum_val = AotTriggerMode(current_processing_mode)
         except ValueError:
@@ -285,37 +390,38 @@ def main():
             sys.exit(1)
 
         logging.info(f"InteractiveAoTOrchestrator mode selected: {aot_mode_enum_val}")
-        
         aot_orchestrator = InteractiveAoTOrchestrator(
             trigger_mode=aot_mode_enum_val,
-            aot_config=aot_runner_config, # This config is used by AoTProcess within the orchestrator
+            aot_config=aot_runner_config,
             direct_oneshot_model_names=args.aot_main_models, 
             direct_oneshot_temperature=args.aot_main_temp,
             assessment_model_names=args.aot_assess_models,
             assessment_temperature=args.aot_assess_temp,
             api_key=api_key,
             use_heuristic_shortcut=not args.aot_disable_heuristic,
+            heuristic_detector=heuristic_detector_instance,
             enable_rate_limiting=args.enable_rate_limiting,
             enable_audit_logging=args.enable_audit_logging
         )
-        
         solution, overall_summary_str = aot_orchestrator.solve(problem_text) 
-
         print("\nInteractive AoT Orchestrator Summary:")
         print(overall_summary_str) 
-        
-        # solution here is Solution from aot_dataclasses
-        if solution and solution.aot_summary_output: # This is summary from AoTProcessor via AoTProcess
-            print(solution.aot_summary_output) 
-        
-        if solution and solution.final_answer:
-            logging.info("Interactive AoT Orchestrator process completed.")
-        else:
-            logging.warning("Interactive AoT Orchestrator process did not produce a final answer.")
-            # Consider if sys.exit(1) is appropriate based on desired behavior
-            if aot_mode_enum_val != AotTriggerMode.NEVER_AOT: # Don't exit if it was just a oneshot
-                 sys.exit(1)
+        if not (solution and solution.final_answer):
+            logging.error("Interactive AoT Orchestrator process did not produce a final answer.")
+            if aot_mode_enum_val != AotTriggerMode.NEVER_AOT: sys.exit(1)
+    else:
+        # This path should ideally not be reached if argparse choices are comprehensive
+        logging.critical(f"Unknown or unhandled processing mode: {current_processing_mode}. Exiting.")
+        sys.exit(1)
 
+    if solution and solution.final_answer:
+        logging.info(f"Process '{current_processing_mode}' completed. Final Answer will be printed below.")
+        print("\n" + "="*20 + " FINAL ANSWER " + "="*20 + "\n")
+        print(solution.final_answer)
+        print("="*54 + "\n")
+    else:
+        # This specific else branch might be redundant if all paths above sys.exit(1) on failure
+        logging.error(f"Process '{current_processing_mode}' concluded without a final answer.")
 
 if __name__ == "__main__":
     main()
