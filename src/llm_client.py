@@ -3,55 +3,14 @@ import requests
 import logging
 from typing import List, Optional, Tuple, cast
 
-# Define dummy classes first
-class BaseBackend:
-    pass
+# Assume llm_accounting is installed and available
+from llm_accounting import LLMAccounting
+from llm_accounting.audit_log import AuditLogger
+from llm_accounting.models.limits import LimitScope, LimitType, TimeInterval
+from llm_accounting.backends.sqlite import SQLiteBackend
+from llm_accounting.backends.base import BaseBackend
 
-class DummySQLiteBackend(BaseBackend):
-    def __init__(self, db_path: str):
-        pass
-    @property
-    def engine(self):
-        return None
-
-class DummyLLMAccounting:
-    def __init__(self, backend):
-        self.backend = backend # Dummy backend needs to be stored
-    def check_quota(self, model: str, username: str, caller_name: str, input_tokens: int):
-        return True, "Dummy: Quota OK"
-    def track_usage(self, model: str, prompt_tokens: int = 0, completion_tokens: int = 0, execution_time: float = 0.0, caller_name: str = "", username: str = ""):
-        pass
-
-class DummyAuditLogger:
-    def __init__(self, backend):
-        pass
-    def log_prompt(self, app_name: str, user_name: str, model: str, prompt_text: str):
-        pass
-    def log_response(self, app_name: str, user_name: str, model: str, response_text: str, remote_completion_id: Optional[str] = None):
-        pass
-
-# --- BEGIN llm_accounting WORKAROUND ---
-try:
-    from llm_accounting import LLMAccounting as RealLLMAccounting
-    from llm_accounting.audit_log import AuditLogger as RealAuditLogger
-    from llm_accounting.models.limits import LimitScope, LimitType, TimeInterval
-    from llm_accounting.backends.sqlite import SQLiteBackend as RealSQLiteBackend
-    from llm_accounting.backends.base import BaseBackend as RealBaseBackend # Import Real BaseBackend
-
-    LLM_ACCOUNTING_AVAILABLE = True
-
-    # Assign real classes if import successful
-    LLMAccounting = RealLLMAccounting
-    AuditLogger = RealAuditLogger
-    SQLiteBackend = RealSQLiteBackend
-    BaseBackend = RealBaseBackend # Overwrite dummy BaseBackend with real one
-except ImportError:
-    LLM_ACCOUNTING_AVAILABLE = False
-    logging.warning("llm_accounting package not found. LLM accounting and audit logging will be disabled.")
-
-    # If import fails, use dummy classes (already defined above)
-    # LLMAccounting, AuditLogger, SQLiteBackend, BaseBackend are already set to dummies
-# --- END llm_accounting WORKAROUND ---
+LLM_ACCOUNTING_AVAILABLE = True # Always true as per new instructions
 
 from src.aot.dataclasses import LLMCallStats
 from src.aot.constants import OPENROUTER_API_URL, HTTP_REFERER, APP_TITLE
@@ -72,21 +31,18 @@ class LLMClient:
             "Content-Type": "application/json"
         }
 
-        # Use original classes if available, otherwise dummies are already assigned
+        # Always use llm_accounting components
         sqlite_backend_instance = SQLiteBackend(db_path=db_path)
         self.accounting = LLMAccounting(backend=sqlite_backend_instance)
-
-        self.enable_rate_limiting = enable_rate_limiting if LLM_ACCOUNTING_AVAILABLE else False
-        self.enable_audit_logging = enable_audit_logging if LLM_ACCOUNTING_AVAILABLE else False
-
-        if self.enable_audit_logging:
+        
+        # enable_rate_limiting and enable_audit_logging can still be controlled by parameters
+        self.enable_rate_limiting = enable_rate_limiting
+        
+        if enable_audit_logging:
             self.audit_logger = AuditLogger(backend=sqlite_backend_instance)
         else:
-            self.audit_logger = None # Or DummyAuditLogger(None) if prefer non-None
-
-        if not LLM_ACCOUNTING_AVAILABLE:
-            logging.warning("LLMClient initialized with accounting/auditing disabled due to missing llm_accounting package.")
-
+            self.audit_logger = None
+        self.enable_audit_logging = enable_audit_logging # This should be set based on the parameter
 
     def call(self, prompt: str, models: List[str], config: LLMConfig) -> Tuple[str, LLMCallStats]:
         if not models:
@@ -108,7 +64,7 @@ class LLMClient:
             call_start_time = time.monotonic()
             
             try:
-                if self.enable_rate_limiting: # Will use dummy if not available
+                if self.enable_rate_limiting: # Now always uses real accounting
                     allowed, reason = self.accounting.check_quota(
                         model=model_name,
                         username="api_user",
@@ -122,7 +78,7 @@ class LLMClient:
                         continue
 
                 # Log the request before making the API call
-                self.accounting.track_usage( # Will use dummy if not available
+                self.accounting.track_usage( # Now always uses real accounting
                     model=model_name,
                     prompt_tokens=len(prompt.split()),
                     caller_name="LLMClient",
@@ -154,7 +110,7 @@ class LLMClient:
                         current_call_stats.completion_tokens = usage.get("completion_tokens", 0)
                         current_call_stats.prompt_tokens = usage.get("prompt_tokens", 0)
                     
-                    self.accounting.track_usage( # Will use dummy if not available
+                    self.accounting.track_usage( # Now always uses real accounting
                         model=model_name,
                         prompt_tokens=current_call_stats.prompt_tokens,
                         completion_tokens=current_call_stats.completion_tokens,
@@ -187,7 +143,7 @@ class LLMClient:
                 current_call_stats.completion_tokens = usage.get("completion_tokens", 0)
                 current_call_stats.prompt_tokens = usage.get("prompt_tokens", 0)
 
-                self.accounting.track_usage( # Will use dummy if not available
+                self.accounting.track_usage( # Now always uses real accounting
                     model=model_name,
                     prompt_tokens=current_call_stats.prompt_tokens,
                     completion_tokens=current_call_stats.completion_tokens,
@@ -238,7 +194,7 @@ class LLMClient:
                 else:
                     response_data_for_log = {"error": str(e)}
 
-                self.accounting.track_usage( # Will use dummy if not available
+                self.accounting.track_usage( # Now always uses real accounting
                     model=model_name,
                     prompt_tokens=current_call_stats.prompt_tokens,
                     completion_tokens=current_call_stats.completion_tokens,
@@ -258,7 +214,7 @@ class LLMClient:
 
             except requests.exceptions.Timeout as e:
                 current_call_stats.call_duration_seconds = time.monotonic() - call_start_time
-                self.accounting.track_usage( # Will use dummy if not available
+                self.accounting.track_usage( # Now always uses real accounting
                     model=model_name,
                     execution_time=current_call_stats.call_duration_seconds,
                     caller_name="LLMClient",
@@ -271,7 +227,7 @@ class LLMClient:
 
             except requests.exceptions.RequestException as e: 
                 current_call_stats.call_duration_seconds = time.monotonic() - call_start_time
-                self.accounting.track_usage( # Will use dummy if not available
+                self.accounting.track_usage( # Now always uses real accounting
                     model=model_name,
                     execution_time=current_call_stats.call_duration_seconds,
                     caller_name="LLMClient",

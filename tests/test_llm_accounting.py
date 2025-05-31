@@ -41,7 +41,7 @@ class TestLLMAccountingIntegration(unittest.TestCase):
            hasattr(self.llm_client.accounting, 'backend'):
             # Explicitly cast to SQLiteBackend to help type checker
             backend = cast(SQLiteBackend, self.llm_client.accounting.backend)
-            if hasattr(backend, 'engine'):
+            if hasattr(backend, 'engine') and backend.engine is not None:
                 backend.engine.dispose()
         
         # Clean up the temporary database file
