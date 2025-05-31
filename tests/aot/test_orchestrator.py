@@ -56,7 +56,7 @@ class TestInteractiveAoTOrchestrator(unittest.TestCase):
             completion_tokens=50, prompt_tokens=100, call_duration_seconds=1.0
         )
         
-        self.patch_llm_client = patch("src.aot.orchestrator.LLMClient")
+        self.patch_llm_client = patch("src.llm_client.LLMClient")
         self.patch_complexity_assessor = patch("src.aot.orchestrator.ComplexityAssessor") # Standard patch
         self.patch_aot_process = patch("src.aot.orchestrator.AoTProcess")
 
