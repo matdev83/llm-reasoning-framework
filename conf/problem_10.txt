@@ -1,0 +1,23 @@
+**Problem 10: The Island Riddle (Revised)**
+
+**Domain:** Logic Puzzle / Knowledge Integration
+
+**Problem Statement:**
+
+On a remote archipelago, there are three islands: Veridia, Azuria, and Ignis. Each island is inhabited by a distinct tribe: the Truth-Tellers (always tell the truth), the Liars (always lie), and the Alternators (alternate strictly between truth and lies, with their first statement's truthfulness being unknown).
+
+Explorer Amelia visited the archipelago and interviewed three inhabitants, one from each island – a Veridian named Vye, an Azurian named Aze, and an Ignisian named Ige. She doesn't know which person is from which tribe yet, only that the three people she spoke to are Vye, Aze, and Ige, and they are each from a different one of the three tribes.
+
+Amelia recorded the following statements:
+
+1.  **Vye says:** "Aze is the Liar."
+2.  **Aze says:** "Ige is the Liar."
+3.  **Ige says:** "Vye is the Liar."
+
+After these statements, Amelia realizes she needs more information. She asks Ige one more question: "Is Vye the Truth-Teller?"
+4.  **Ige replies:** "Yes."
+
+Finally, Amelia notes that Vye appeared uneasy when making his statement, while Aze seemed confident. This observation leads her to believe that **Vye is not the Truth-Teller.**
+
+**Task:**
+Determine which tribe each person (Vye, Aze, Ige) belongs to.

@@ -1,0 +1,79 @@
+**Problem 10: The Island Riddle (Revised) - Solution and Reasoning**
+
+**Solution:**
+*   **Vye:** Alternator
+*   **Aze:** Truth-Teller
+*   **Ige:** Liar
+
+**Reasoning Steps:**
+
+Let T = Truth-Teller, L = Liar, A = Alternator.
+The three people (Vye, Aze, Ige) are one of each tribe.
+
+**Initial Analysis of Statements 1-3 (The Accusation Cycle):**
+1.  Vye: "Aze is L."
+2.  Aze: "Ige is L."
+3.  Ige: "Vye is L."
+
+This cycle of accusations typically has two main consistent assignments for (T,L,A) if we don't know who is who initially:
+*   Possibility A (derived from assuming Vye is T): Vye=T, Aze=L, Ige=A.
+    *   Vye(T)'s statement "Aze is L" is True.
+    *   Aze(L)'s statement "Ige is L" is False (as Ige would be A).
+    *   Ige(A)'s statement "Vye is L" would be False (as Vye is T). This would be Ige's first statement's determined truth value.
+*   Possibility B (derived from assuming Vye is L, which leads to a contradiction, then checking Vye=A): Vye=A, Aze=T, Ige=L.
+    *   Vye(A)'s statement "Aze is L" is False (as Aze would be T). This is Vye's first statement's determined truth value.
+    *   Aze(T)'s statement "Ige is L" is True.
+    *   Ige(L)'s statement "Vye is L" is False (as Vye would be A).
+
+**Analysis of Statement 4 (Ige's reply):**
+Ige is asked: "Is Vye the Truth-Teller?" Ige replies: "Yes" (meaning Ige asserts "Vye is T").
+
+Let's test the two possibilities (A and B) against Ige's second statement:
+
+*   **Test Possibility A: Vye=T, Aze=L, Ige=A.**
+    *   Ige is an Alternator.
+    *   Ige's 1st statement ("Vye is L") was determined to be False (F).
+    *   Ige's 2nd statement ("Vye is T") must therefore be True (T) for Ige to alternate.
+    *   Is the content "Vye is T" true in this possibility? Yes, Vye is T.
+    *   So, Ige (A) stating "Vye is T" (True) as his second statement is consistent with an F,T sequence.
+    *   This possibility (Vye=T, Aze=L, Ige=A) remains valid.
+
+*   **Test Possibility B: Vye=A, Aze=T, Ige=L.**
+    *   Ige is a Liar.
+    *   Ige's 2nd statement ("Vye is T") must be False for Ige to be a Liar.
+    *   Is the content "Vye is T" true in this possibility? No, Vye is A (not T). So the content "Vye is T" is False.
+    *   Ige (L) stating "Vye is T" (which is False) is consistent with Ige being a Liar. (A Liar says false things).
+    *   This possibility (Vye=A, Aze=T, Ige=L) also remains valid.
+
+**Using the Final Piece of Information (Amelia's Observation):**
+Amelia believes that **"Vye is not the Truth-Teller."** This information is taken as a fact for solving the puzzle.
+
+*   Consider Possibility A: Vye=T, Aze=L, Ige=A.
+    *   This possibility states Vye is the Truth-Teller.
+    *   This contradicts Amelia's factual observation ("Vye is not the Truth-Teller").
+    *   Therefore, Possibility A is eliminated.
+
+*   Consider Possibility B: Vye=A, Aze=T, Ige=L.
+    *   This possibility states Vye is an Alternator.
+    *   This is consistent with Amelia's observation ("Vye is not the Truth-Teller").
+    *   Therefore, Possibility B is the only remaining solution.
+
+**Final Check of Possibility B (Vye=A, Aze=T, Ige=L):**
+*   **Tribes:** Vye is Alternator, Aze is Truth-Teller, Ige is Liar. (One of each, distinct).
+*   **Amelia's Observation:** Vye is not T. (True, Vye is A).
+*   **Statements:**
+    1.  Vye (A) says: "Aze is L."
+        *   Aze is T. So, "Aze is L" is False. This is Vye's 1st statement. (Consistent for A to say F).
+    2.  Aze (T) says: "Ige is L."
+        *   Ige is L. So, "Ige is L" is True. (Consistent for T to say T).
+    3.  Ige (L) says: "Vye is L."
+        *   Vye is A (not L). So, "Vye is L" is False. (Consistent for L to say F). This is Ige's 1st statement.
+    4.  Ige (L) replies "Yes" to "Is Vye the Truth-Teller?" (Ige asserts "Vye is T").
+        *   Vye is A (not T). So, "Vye is T" is False. (Consistent for L to say F). This is Ige's 2nd statement.
+
+All conditions and statements are consistent with this assignment. The Alternator (Vye) had an F, ? sequence (only one statement made). The Liar (Ige) had an F, F sequence. The Truth-Teller (Aze) had a T sequence.
+
+Therefore, the unique solution is:
+*   **Vye: Alternator**
+*   **Aze: Truth-Teller**
+*   **Ige: Liar**

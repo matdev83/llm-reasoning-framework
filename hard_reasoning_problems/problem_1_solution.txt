@@ -1,0 +1,73 @@
+**Problem 1: The Alien Artifact - Solution and Reasoning**
+
+**Solution:**
+
+The 10 active components are located at the following coordinates (x, y, z):
+
+*   **Layer Z=0 (Bottom):** (0,0,0), (1,1,0), (0,2,0), (2,0,0)
+*   **Layer Z=1 (Middle):** (0,1,1), (1,0,1), (1,2,1), (2,1,1)
+*   **Layer Z=2 (Top):** (0,0,2), (1,1,2)
+
+**Reasoning Steps:**
+
+1.  **Understand Core Constraints:**
+    *   3x3x3 cube = 27 components.
+    *   10 Active (A), 17 Inactive (I).
+    *   Rule 3: (1,1,1) is I.
+    *   Rule 2: No two A's share a face. This implies a 3D checkerboard pattern. If (x,y,z) is A, its direct neighbors must be I. Components can be classified by the parity of (x+y+z).
+        *   (1,1,1) has sum 3 (odd). If it's I, then A components are likely those with an even sum of (x+y+z) to satisfy Rule 2 globally. There are 14 "even sum" positions and 13 "odd sum" positions. Since (1,1,1) is an "odd sum" and is I, this strongly suggests all A components are "even sum".
+
+2.  **Analyze Rule 4 (Top-Left 2x2 Subgrids):** "If you look at any of the six faces of the large cube, the 2x2 sub-grid in the top-left corner of that face contains exactly two active components." Combined with Rule 2 (no shared faces), the two A's in such a 2x2 grid must be diagonal to each other.
+
+3.  **Apply Rule 4 with "Even Sum" Hypothesis:**
+    *   Consider a generic face, e.g., the face at Z=2 (top). The top-left 2x2 grid from an external viewpoint is (0,0,2), (1,0,2), (0,1,2), (1,1,2).
+        *   (0,0,2): sum 2 (even)
+        *   (1,0,2): sum 3 (odd) -> Must be I if "even sum" hypothesis holds.
+        *   (0,1,2): sum 3 (odd) -> Must be I if "even sum" hypothesis holds.
+        *   (1,1,2): sum 4 (even)
+        *   To have two A's in this 2x2 grid, (0,0,2) and (1,1,2) must be A. This fits the diagonal requirement.
+
+4.  **Systematically Apply Rule 4 to all Faces:**
+    The "top-left" is interpreted as the corner with the lowest coordinate values for that face's plane.
+    *   **Face Z=2 (Top):** (0,0,2) & (1,1,2) are A. (2 components)
+    *   **Face Z=0 (Bottom):** (0,0,0) & (1,1,0) are A. (2 components)
+    *   **Face X=0 (Left):** The 2x2 subgrid involves (0,y,z). "Top-left" would be (0,0,0), (0,1,0), (0,0,1), (0,1,1). Even sum A's: (0,0,0) (already listed) & (0,1,1) are A. (1 new component: (0,1,1))
+    *   **Face X=2 (Right):** "Top-left" (2,0,0), (2,1,0), (2,0,1), (2,1,1). Even sum A's: (2,0,0) & (2,1,1) are A. (2 new components: (2,0,0), (2,1,1))
+    *   **Face Y=0 (Back, if viewing from positive Y):** "Top-left" (0,0,0), (1,0,0), (0,0,1), (1,0,1). Even sum A's: (0,0,0) (already listed) & (1,0,1) are A. (1 new component: (1,0,1))
+    *   **Face Y=2 (Front):** "Top-left" (0,2,0), (1,2,0), (0,2,1), (1,2,1). Even sum A's: (0,2,0) & (1,2,1) are A. (2 new components: (0,2,0), (1,2,1))
+
+5.  **Consolidate Active Components and Count:**
+    *   From Z=2: (0,0,2), (1,1,2)
+    *   From Z=0: (0,0,0), (1,1,0)
+    *   From X=0: (0,1,1)
+    *   From X=2: (2,0,0), (2,1,1)
+    *   From Y=0: (1,0,1)
+    *   From Y=2: (0,2,0), (1,2,1)
+
+    Unique components:
+    (0,0,0), (0,0,2), (0,1,1), (0,2,0)
+    (1,1,0), (1,1,2), (1,0,1), (1,2,1)
+    (2,0,0), (2,1,1)
+    Total = 10 active components. This matches Rule 1.
+
+6.  **Verify All Rules with the Derived Configuration:**
+    *   Rule 1 (10 A's): Verified (10 components listed).
+    *   Rule 2 (No shared faces): Verified. All listed components have an even (x+y+z) sum. (1,1,1) (odd sum) is I. All other odd-sum spots are implicitly I. Thus, no two A's can share a face.
+    *   Rule 3 ((1,1,1) is I): Verified, as (1,1,1) has an odd sum and is not in the list of A's.
+    *   Rule 4 (2 A's in top-left 2x2 of each face): Verified during the derivation in step 3 & 4.
+        *   Z=2: (0,0,2)A, (1,0,2)I, (0,1,2)I, (1,1,2)A. Yes.
+        *   Z=0: (0,0,0)A, (1,0,0)I, (0,1,0)I, (1,1,0)A. Yes.
+        *   X=0: (0,0,0)A, (0,1,0)I, (0,0,1)I, (0,1,1)A. Yes.
+        *   X=2: (2,0,0)A, (2,1,0)I, (2,0,1)I, (2,1,1)A. Yes.
+        *   Y=0: (0,0,0)A, (1,0,0)I, (0,0,1)I, (1,0,1)A. Yes.
+        *   Y=2: (0,2,0)A, (1,2,0)I, (0,2,1)I, (1,2,1)A. Yes.
+    *   Rule 5 (At least one A in each layer):
+        *   Layer Z=0 (Bottom): (0,0,0), (1,1,0), (0,2,0), (2,0,0) --- 4 components. Verified.
+        *   Layer Z=1 (Middle): (0,1,1), (1,0,1), (1,2,1), (2,1,1) --- 4 components. Verified.
+        *   Layer Z=2 (Top): (0,0,2), (1,1,2) --- 2 components. Verified.
+    *   Rule 6 (Bottom layer has more A's than top layer):
+        *   Bottom (Z=0) has 4. Top (Z=2) has 2. (4 > 2). Verified.
+
+7.  **Uniqueness Check:** The "even sum" parity for active components is strongly enforced by Rule 2 and Rule 3. Rule 4 then dictates specific positions for active components on the faces. The combination of these rules leads to this specific set of 10 components. Any deviation would violate one or more rules (e.g., including an "odd sum" active component would likely violate Rule 2 or require removing multiple "even sum" components, making it hard to reach 10 A's or satisfy Rule 4).
+
+This set of active components uniquely satisfies all given conditions.

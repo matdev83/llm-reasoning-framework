@@ -1,0 +1,80 @@
+**Problem 3: The Levitating Spheres - Solution and Reasoning**
+
+**Solution:**
+
+**Final Charge Ranking:**
+The final charges are `q_A = +3Q/8`, `q_B = +Q/4` (or `+2Q/8`), and `q_C = +3Q/8`.
+Ranking from largest positive charge to smallest:
+`q_A = q_C > q_B`
+
+**Spatial Arrangement (Viewed from Above):**
+The spheres will form an **isosceles triangle**. Spheres A and C will be at the ends of the base of the triangle, and sphere B will be at the apex. The distance between A and C will be greater than the distance between A and B, and also greater than the distance between B and C (`r_AC > r_AB = r_BC`).
+
+**Reasoning Steps:**
+
+**Part 1: Calculating Final Charges**
+
+Let `q_A, q_B, q_C` be the charges on spheres A, B, and C respectively. Initially, `q_A = q_B = q_C = 0`.
+
+1.  **Sphere A is given charge +Q:**
+    *   `q_A = +Q`
+    *   `q_B = 0`
+    *   `q_C = 0`
+
+2.  **Sphere B touched to Sphere A, then separated:**
+    *   When two identical spheres touch, the total charge is distributed evenly between them.
+    *   Total charge on A and B = `q_A + q_B = +Q + 0 = +Q`.
+    *   New `q_A = (+Q) / 2 = +Q/2`
+    *   New `q_B = (+Q) / 2 = +Q/2`
+    *   `q_C` remains `0`.
+    *   Current charges: `A: +Q/2, B: +Q/2, C: 0`
+
+3.  **Sphere C touched to Sphere B, then separated:**
+    *   Total charge on B and C = `q_B + q_C = +Q/2 + 0 = +Q/2`.
+    *   New `q_B = (+Q/2) / 2 = +Q/4`
+    *   New `q_C = (+Q/2) / 2 = +Q/4`
+    *   `q_A` remains `+Q/2`.
+    *   Current charges: `A: +Q/2, B: +Q/4, C: +Q/4`
+
+4.  **Sphere A touched to Sphere C, then separated:**
+    *   Total charge on A and C = `q_A + q_C = +Q/2 + Q/4`.
+    *   To sum, use a common denominator: `+2Q/4 + Q/4 = +3Q/4`.
+    *   New `q_A = (+3Q/4) / 2 = +3Q/8`
+    *   New `q_C = (+3Q/4) / 2 = +3Q/8`
+    *   `q_B` remains `+Q/4`.
+    *   Final charges:
+        *   `q_A = +3Q/8`
+        *   `q_B = +Q/4` (which is `+2Q/8`)
+        *   `q_C = +3Q/8`
+
+**Part 2: Ranking Final Charges**
+
+Comparing the final charges:
+*   `q_A = 3Q/8`
+*   `q_B = 2Q/8`
+*   `q_C = 3Q/8`
+
+Therefore, `q_A = q_C > q_B`.
+
+**Part 3: Qualitative Spatial Arrangement**
+
+*   All three spheres (A, B, C) now have positive charges (`+3Q/8`, `+2Q/8`, `+3Q/8`). Like charges repel.
+*   They are suspended by identical insulating threads from a common point.
+*   The electrostatic repulsive forces between them will cause them to move apart until an equilibrium is reached. In this equilibrium, the vector sum of forces on each sphere (tension, gravity, electrostatic forces) is zero.
+*   Let's consider the magnitudes of the electrostatic forces between the pairs, which are proportional to the product of the charges (`F ~ q_i*q_j`):
+    *   Force between A and C (`F_AC`): `q_A * q_C = (3Q/8) * (3Q/8) = 9Q^2/64`
+    *   Force between A and B (`F_AB`): `q_A * q_B = (3Q/8) * (2Q/8) = 6Q^2/64`
+    *   Force between B and C (`F_BC`): `q_B * q_C = (2Q/8) * (3Q/8) = 6Q^2/64`
+
+*   From these charge products, we see that `F_AC` is stronger than `F_AB` and `F_BC` (assuming similar separation distances initially, but the final distances `r_ij` will adjust). More precisely, the products `q_i*q_j` determine the forces for any given `r`.
+*   We have `q_A = q_C`. Spheres A and C have equal charges. Sphere B has a smaller charge.
+*   The repulsive force between A and C is the largest. This pair will try to maximize its separation distance `r_AC`.
+*   The repulsive forces `F_AB` and `F_BC` have equal charge product terms.
+*   Considering the symmetry: Since `q_A = q_C`, sphere B must be positioned symmetrically with respect to A and C. If you draw a line between A and C, B must lie on the perpendicular bisector of this line segment when viewed from above (or be collinear, which is unlikely for repulsion from a common suspension point unless forces are very different).
+*   The three spheres will form a triangle when viewed from above.
+*   Since `F_AB` (related to `q_A*q_B`) and `F_BC` (related to `q_B*q_C`) are based on equal charge products (`6Q^2/64`), and `q_A=q_C`, this implies that the distances `r_AB` and `r_BC` will be equal in equilibrium due to the symmetry with respect to sphere B.
+*   The distance `r_AC` will be determined by the balance of `F_AC` and components of tensions and other electrostatic forces. Since `q_A*q_C > q_A*q_B`, it is expected that `r_AC > r_AB` (and `r_AC > r_BC`).
+*   Thus, the triangle formed by A, B, and C will have sides `r_AB = r_BC` and a potentially different side `r_AC`. This describes an **isosceles triangle**.
+*   Sphere B is at the apex, and AC is the base. The base `AC` is longer than the equal sides `AB` and `BC`. (If `q_A*q_C` were smaller than the others, AC would be shorter).
+
+This arrangement satisfies the condition that all spheres repel each other and find a stable equilibrium.

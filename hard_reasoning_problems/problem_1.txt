@@ -1,0 +1,18 @@
+**Problem 1: The Alien Artifact**
+
+**Domain:** Logic Puzzle / Spatial Reasoning
+
+**Problem Statement:**
+
+Archaeologists have discovered an alien artifact, a perfect cube, made of smaller, identical cubic components. Each component is either "active" (A) or "inactive" (I). The artifact projects a holographic symbol based on the arrangement of its active components.
+
+The artifact is a 3x3x3 cube (composed of 27 smaller cubes). Scientists have determined the following from partial scans:
+
+1.  There are exactly 10 active components.
+2.  No two active components share a face (they can share edges or corners).
+3.  The central component of the entire 3x3x3 cube is inactive.
+4.  If you look at any of the six faces of the large cube, the 2x2 sub-grid in the top-left corner of that face contains exactly two active components.
+5.  There is at least one active component in each of the 3 "layers" (bottom, middle, top).
+6.  The bottom layer has more active components than the top layer.
+
+**Task:** Determine the exact 3D arrangement of the 10 active components. Represent your answer by listing the coordinates (x, y, z) of each active component, where x, y, z can be 0, 1, or 2. Assume (0,0,0) is one corner and (2,2,2) is the opposite corner. The layers are defined by the z-coordinate (z=0 is bottom, z=1 is middle, z=2 is top).

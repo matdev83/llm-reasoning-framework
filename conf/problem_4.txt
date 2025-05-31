@@ -1,0 +1,18 @@
+**Problem 4: The Mystery Crop Failure**
+
+**Domain:** Knowledge Integration / Causal Reasoning
+
+**Problem Statement:**
+
+A remote farming community relies on a single large field, Field Alpha, for its primary grain crop. For generations, they've used a consistent crop rotation schedule: Grain (Year 1) -> Legumes (Year 2) -> Fallow (Year 3), then repeat. They use traditional farming methods and no synthetic pesticides or fertilizers. The climate is stable.
+
+This year (Year 1 of a new cycle, so Grain was planted), Field Alpha suffered a catastrophic crop failure – almost no grain grew. However, a smaller, geographically isolated field, Field Beta, also planted with the same grain seeds from the same supplier, and also in Year 1 of its own identical rotation cycle, had a perfectly normal, bountiful harvest. Field Beta is 5 miles away, upstream along the valley's only river, and has slightly different soil composition (more clayey than Alpha's loamy soil).
+
+The community elders recall the following events over the past three years:
+
+1.  **Three Years Ago (During Alpha's Fallow Year / Beta's Fallow Year):** A new, small-scale artisanal pottery workshop was established beside the river, between Field Alpha and Field Beta. The workshop uses local river clay. They rinse their tools and clay residues into a settling pond system, which is supposed to prevent clay particles from directly entering the river. The workshop had a minor incident where some untreated clay slurry accidentally washed directly into the river for a day.
+2.  **Two Years Ago (During Alpha's Grain Year / Beta's Grain Year):** Both fields had successful grain harvests. The community noted an increase in migratory bird populations that year, particularly species that feed on insects.
+3.  **One Year Ago (During Alpha's Legume Year / Beta's Legume Year):** Field Alpha had a below-average but acceptable legume harvest. Field Beta had a normal legume harvest. Some community members noted that the river water downstream of the pottery workshop sometimes looked a bit cloudier than usual, even after the workshop upgraded its settling ponds after the initial incident. No specific crop diseases were identified in Field Alpha's legumes.
+4.  **This Year (During Alpha's Grain Year - Failure / Beta's Grain Year - Success):** The crop failure in Field Alpha. Field Beta is fine. Early in the growing season, there was a period of unusually heavy rainfall for one week, causing the river to swell but not significantly flood Field Alpha (water didn't go over the banks more than a few feet).
+
+**Task:** Identify the most probable primary cause for the crop failure in Field Alpha this year. Explain your reasoning by linking the events and observations.

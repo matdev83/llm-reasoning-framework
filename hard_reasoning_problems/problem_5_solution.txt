@@ -1,0 +1,104 @@
+**Problem 5: The Optimal Commute - Solution and Reasoning**
+
+**Solution:**
+
+The optimal combination of one-way trips Alex should make in a month is:
+*   **Car (n_C):** 22 trips
+*   **Bus (n_B):** 8 trips
+*   **Bicycle (n_K):** 10 trips
+
+**Reasoning Steps:**
+
+1.  **Establish Basic Parameters:**
+    *   Value of time: $10/hour = $10/60 minutes = $1/6 per minute.
+    *   Workdays: 20.
+    *   Total one-way trips: 20 days/month * 2 trips/day = 40 trips/month.
+    *   Monthly monetary budget: $80.00.
+    *   Minimum bicycle usage constraint: 25% of 40 trips = 0.25 * 40 = 10 bicycle trips.
+
+2.  **Calculate Perceived Cost per One-Way Trip for Each Mode:**
+    The total perceived cost per trip = (Time in minutes * Value of time per minute) + Monetary Cost per trip.
+
+    *   **Car (C):**
+        *   Time Cost: 20 min * ($1/6 /min) = $20/6 = $3.333...
+        *   Monetary Cost: $3.00
+        *   Perceived Cost (Car): $20/6 + $3.00 = $20/6 + $18/6 = $38/6 = $19/3 \approx \$6.33$
+
+    *   **Bus (B):**
+        *   Time Cost: 45 min * ($1/6 /min) = $45/6 = $7.50
+        *   Monetary Cost: $1.50
+        *   Perceived Cost (Bus): $7.50 + $1.50 = $9.00
+
+    *   **Bicycle (K):**
+        *   Time Cost: 60 min * ($1/6 /min) = $60/6 = $10.00
+        *   Monetary Cost: $0.20
+        *   Perceived Cost (Bicycle): $10.00 + $0.20 = $10.20
+
+3.  **Order Modes by Cost Metrics:**
+    *   By Perceived Cost (lower is better):
+        1.  Car ($6.33)
+        2.  Bus ($9.00)
+        3.  Bicycle ($10.20)
+    *   By Monetary Cost (lower is better, for budget considerations):
+        1.  Bicycle ($0.20)
+        2.  Bus ($1.50)
+        3.  Car ($3.00)
+
+4.  **Satisfy the Minimum Bicycle Usage Constraint:**
+    Alex must take at least 10 bicycle trips (`n_K >= 10`). Since Bicycle has the highest perceived cost, Alex should take exactly the minimum required to meet this constraint, if possible.
+    *   Set `n_K = 10`.
+    *   Monetary cost for these 10 bicycle trips: `10 trips * $0.20/trip = $2.00`.
+    *   Perceived cost for these 10 bicycle trips: `10 trips * $10.20/trip = $102.00`.
+    *   Remaining trips to be allocated: `40 - 10 = 30` trips.
+    *   Remaining budget: `$80.00 - $2.00 = $78.00`.
+
+5.  **Allocate Remaining 30 Trips (Car or Bus) to Minimize Perceived Cost within Remaining Budget:**
+    For the remaining 30 trips (`n_C + n_B = 30`), Alex should prioritize the mode with the lower perceived cost, which is the Car ($6.33).
+
+    Let `c` be the number of car trips and `b` be the number of bus trips from these 30.
+    *   `c + b = 30`
+    *   Monetary cost constraint: `c * $3.00 + b * $1.50 <= $78.00`
+
+    Substitute `b = 30 - c` into the monetary cost constraint:
+    `3c + 1.5(30 - c) <= 78`
+    `3c + 45 - 1.5c <= 78`
+    `1.5c <= 78 - 45`
+    `1.5c <= 33`
+    `c <= 33 / 1.5`
+    `c <= 22`
+
+    So, Alex should take the maximum possible number of Car trips, `c = 22`.
+    This means `n_C = 22`.
+    The number of Bus trips will then be `b = 30 - c = 30 - 22 = 8`.
+    So `n_B = 8`.
+
+6.  **Proposed Solution:**
+    *   `n_C = 22` trips
+    *   `n_B = 8` trips
+    *   `n_K = 10` trips
+
+7.  **Verify Constraints for the Proposed Solution:**
+    *   **Total Trips:** `22 + 8 + 10 = 40`. (Correct)
+    *   **Minimum Bicycle Usage:** `n_K = 10`, which meets the `n_K >= 10` constraint. (Correct)
+    *   **Monthly Budget:**
+        *   Car cost: `22 * $3.00 = $66.00`
+        *   Bus cost: `8 * $1.50 = $12.00`
+        *   Bicycle cost: `10 * $0.20 = $2.00`
+        *   Total Monetary Cost: `$66.00 + $12.00 + $2.00 = $80.00`.
+        This exactly meets the $80.00 budget. (Correct)
+
+8.  **Confirming Optimality:**
+    *   The 10 bicycle trips are fixed by the constraint and the fact that bicycle has the highest perceived cost (so Alex wouldn't choose more than the minimum if other options are available and cheaper in perceived cost).
+    *   For the remaining 30 trips, Car trips have a lower perceived cost than Bus trips. Therefore, Alex should maximize Car trips until the budget is exhausted. The calculation showed that 22 Car trips and 8 Bus trips meet this condition precisely.
+    *   If Alex were to swap a Car trip for a Bus trip (e.g., `n_C=21, n_B=9, n_K=10`):
+        *   Monetary cost: `21*$3 + 9*$1.50 + 10*$0.20 = $63 + $13.50 + $2.00 = $78.50` (within budget).
+        *   Change in perceived cost: `-$6.33` (for one less Car) `+ $9.00` (for one more Bus) = `+$2.67`. The total perceived cost would increase.
+    *   This confirms that the combination `n_C=22, n_B=8, n_K=10` is optimal.
+
+9.  **Total Perceived Cost (for completeness):**
+    *   Cars: `22 * ($19/3) = $418/3 = $139.333...`
+    *   Buses: `8 * $9.00 = $72.00`
+    *   Bicycles: `10 * $10.20 = $102.00`
+    *   Total: `$139.333... + $72.00 + $102.00 = $313.333...` (or `$940/3`)
+
+This structured approach ensures all constraints are met while minimizing the total perceived cost.
