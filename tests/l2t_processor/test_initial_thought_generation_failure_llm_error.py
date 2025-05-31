@@ -10,6 +10,7 @@ from src.l2t.dataclasses import (
     L2TNode,
 )
 from src.aot.dataclasses import LLMCallStats
+from src.llm_config import LLMConfig # Added LLMConfig
 
 from src.llm_client import LLMClient
 from src.l2t_processor_utils.node_processor import NodeProcessor
@@ -19,7 +20,7 @@ logging.disable(logging.CRITICAL)
 
 class TestL2TProcessor_InitialThoughtFailureLLMError(unittest.TestCase):
     def setUp(self):
-        self.config = L2TConfig(
+        self.l2t_config = L2TConfig( # Renamed from self.config
             max_steps=5,
             max_total_nodes=10,
             max_time_seconds=60,
@@ -27,6 +28,9 @@ class TestL2TProcessor_InitialThoughtFailureLLMError(unittest.TestCase):
             thought_generation_model_names=["mock-generator"],
             initial_prompt_model_names=["mock-initial"],
         )
+        # Define LLMConfig objects for L2TProcessor
+        self.initial_thought_llm_config = LLMConfig(temperature=0.7)
+        self.node_processor_llm_config = LLMConfig(temperature=0.1)
 
     @patch("src.l2t_processor_utils.node_processor.NodeProcessor")
     @patch("src.llm_client.LLMClient")
@@ -38,7 +42,12 @@ class TestL2TProcessor_InitialThoughtFailureLLMError(unittest.TestCase):
         # Set mock return value before processor instantiation
         MockL2TProcessorLLMClient.return_value.call.return_value = ("Error: LLM unavailable", None)
 
-        processor = L2TProcessor(api_key="mock_api_key", config=self.config)
+        processor = L2TProcessor(
+            api_key="mock_api_key",
+            l2t_config=self.l2t_config, # Use l2t_config
+            initial_thought_llm_config=self.initial_thought_llm_config,
+            node_processor_llm_config=self.node_processor_llm_config,
+        )
         mock_node_processor_instance = processor.node_processor
         mock_node_processor_instance._update_result_stats = MagicMock() # Explicitly mock the method
 
@@ -47,11 +56,13 @@ class TestL2TProcessor_InitialThoughtFailureLLMError(unittest.TestCase):
         self.assertFalse(result.succeeded)
         self.assertIsNone(result.final_answer)
         self.assertIsNotNone(result.error_message)
-        self.assertIn("Failed during initial thought generation", result.error_message)
+        if result.error_message: # Ensure it's not None before checking content
+            self.assertIn("Failed during initial thought generation", result.error_message)
         self.assertEqual(result.total_llm_calls, 0) # No stats returned, so no calls counted by _update_result_stats
         self.assertEqual(result.total_completion_tokens, 0)
         self.assertIsNotNone(result.reasoning_graph)
-        self.assertEqual(len(result.reasoning_graph.nodes), 0)
+        if result.reasoning_graph: # Ensure it's not None before accessing nodes
+            self.assertEqual(len(result.reasoning_graph.nodes), 0)
         def mock_update_stats_effect(result_obj, stats):
             if stats:
                 result_obj.total_llm_calls += 1

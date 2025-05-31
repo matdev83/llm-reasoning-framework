@@ -22,17 +22,16 @@ class TestInteractiveAoTOrchestrator(unittest.TestCase):
         self.problem_text = "Test problem for orchestrator."
         self.aot_config = AoTRunnerConfig(
             main_model_names=["test-aot-main-model"],
-            temperature=0.7,
             max_steps=5,
         )
-        self.direct_oneshot_config = {
-            "model_names": ["test-direct-oneshot-model"],
-            "temperature": 0.5
-        }
-        self.assessment_config = {
-            "model_names": ["test-assessment-model"],
-            "temperature": 0.0
-        }
+        # Define LLMConfig objects for various calls
+        from src.llm_config import LLMConfig # Import LLMConfig here for use in tests
+        self.aot_main_llm_config = LLMConfig(temperature=0.7)
+        self.direct_oneshot_llm_config = LLMConfig(temperature=0.5)
+        self.assessment_llm_config = LLMConfig(temperature=0.0)
+
+        self.direct_oneshot_model_names = ["test-direct-oneshot-model"] # Used for models param
+        self.assessment_model_names = ["test-assessment-model"] # Used for models param
         self.api_key = "test_api_key"
 
         self.mock_aot_process_solution = Solution()
@@ -52,7 +51,7 @@ class TestInteractiveAoTOrchestrator(unittest.TestCase):
 
         self.mock_direct_oneshot_llm_response = "Direct one-shot answer from orchestrator"
         self.mock_direct_oneshot_stats = LLMCallStats(
-            model_name=self.direct_oneshot_config["model_names"][0],
+            model_name=self.direct_oneshot_model_names[0],
             completion_tokens=50, prompt_tokens=100, call_duration_seconds=1.0
         )
         
@@ -87,11 +86,11 @@ class TestInteractiveAoTOrchestrator(unittest.TestCase):
     def _create_orchestrator(self, trigger_mode: AotTriggerMode, use_heuristic_shortcut: bool = True, heuristic_detector: Optional[HeuristicDetector] = None, enable_rate_limiting: bool = False, enable_audit_logging: bool = False):
         return InteractiveAoTOrchestrator(
             trigger_mode=trigger_mode,
-            aot_config=self.aot_config,
-            direct_oneshot_model_names=self.direct_oneshot_config["model_names"],
-            direct_oneshot_temperature=self.direct_oneshot_config["temperature"],
-            assessment_model_names=self.assessment_config["model_names"],
-            assessment_temperature=self.assessment_config["temperature"],
+            aot_runner_config=self.aot_config, # Renamed parameter
+            direct_oneshot_model_names=self.direct_oneshot_model_names,
+            direct_oneshot_llm_config=self.direct_oneshot_llm_config, # Use LLMConfig object
+            assessment_model_names=self.assessment_model_names,
+            assessment_llm_config=self.assessment_llm_config, # Use LLMConfig object
             api_key=self.api_key,
             use_heuristic_shortcut=use_heuristic_shortcut,
             heuristic_detector=heuristic_detector,
@@ -104,9 +103,9 @@ class TestInteractiveAoTOrchestrator(unittest.TestCase):
         solution, summary = orchestrator.solve(self.problem_text)
 
         self.MockAoTProcess.assert_called_once_with(
-            aot_config=self.aot_config,
-            direct_oneshot_model_names=self.direct_oneshot_config["model_names"],
-            direct_oneshot_temperature=self.direct_oneshot_config["temperature"],
+            aot_runner_config=self.aot_config, # Renamed parameter
+            direct_oneshot_model_names=self.direct_oneshot_model_names,
+            direct_oneshot_llm_config=self.direct_oneshot_llm_config, # Use LLMConfig object
             api_key=self.api_key,
             enable_rate_limiting=False,
             enable_audit_logging=False
@@ -136,8 +135,8 @@ class TestInteractiveAoTOrchestrator(unittest.TestCase):
         self.mock_assessor_instance.assess.assert_not_called()
         self.mock_orchestrator_llm_client_instance.call.assert_called_once_with(
             prompt=self.problem_text, 
-            models=self.direct_oneshot_config["model_names"], 
-            temperature=self.direct_oneshot_config["temperature"]
+            models=self.direct_oneshot_model_names, 
+            config=self.direct_oneshot_llm_config # Use LLMConfig object
         )
         self.assertEqual(solution.final_answer, self.mock_direct_oneshot_llm_response)
         self.assertIn("Orchestrator Main Model Call", summary)
@@ -153,7 +152,13 @@ class TestInteractiveAoTOrchestrator(unittest.TestCase):
         orchestrator = self._create_orchestrator(AotTriggerMode.ASSESS_FIRST)
         solution, summary = orchestrator.solve(self.problem_text)
 
-        self.MockComplexityAssessorClass.assert_called_once() 
+        self.MockComplexityAssessorClass.assert_called_once_with(
+            llm_client=ANY, # LLMClient is mocked, so ANY is fine
+            small_model_names=self.assessment_model_names,
+            llm_config=self.assessment_llm_config, # Use LLMConfig object
+            use_heuristic_shortcut=True,
+            heuristic_detector=ANY # HeuristicDetector is mocked or passed as ANY
+        )
         self.mock_assessor_instance.assess.assert_called_once_with(self.problem_text)
         
         self.MockAoTProcess.assert_called_once() 
@@ -165,7 +170,7 @@ class TestInteractiveAoTOrchestrator(unittest.TestCase):
         
         problem_solving_calls_to_orchestrator_client = [
             c for c in self.mock_orchestrator_llm_client_instance.call.call_args_list
-            if c[0][0] == self.problem_text and c[1].get('models') == self.direct_oneshot_config["model_names"]
+            if c[0][0] == self.problem_text and c[1].get('models') == self.direct_oneshot_model_names
         ]
         self.assertEqual(len(problem_solving_calls_to_orchestrator_client), 0)
 
@@ -179,7 +184,13 @@ class TestInteractiveAoTOrchestrator(unittest.TestCase):
         orchestrator = self._create_orchestrator(AotTriggerMode.ASSESS_FIRST)
         solution, summary = orchestrator.solve(self.problem_text)
 
-        self.MockComplexityAssessorClass.assert_called_once()
+        self.MockComplexityAssessorClass.assert_called_once_with(
+            llm_client=ANY,
+            small_model_names=self.assessment_model_names,
+            llm_config=self.assessment_llm_config,
+            use_heuristic_shortcut=True,
+            heuristic_detector=ANY
+        )
         self.mock_assessor_instance.assess.assert_called_once_with(self.problem_text)
 
         if orchestrator.aot_process_instance:
@@ -188,8 +199,8 @@ class TestInteractiveAoTOrchestrator(unittest.TestCase):
         
         self.mock_orchestrator_llm_client_instance.call.assert_called_once_with(
             prompt=self.problem_text, 
-            models=self.direct_oneshot_config["model_names"], 
-            temperature=self.direct_oneshot_config["temperature"]
+            models=self.direct_oneshot_model_names, 
+            config=self.direct_oneshot_llm_config # Use LLMConfig object
         )
         self.assertEqual(solution.final_answer, self.mock_direct_oneshot_llm_response)
         self.assertIn("Orchestrator Main Model Call", summary) 
@@ -223,6 +234,9 @@ class TestInteractiveAoTOrchestrator(unittest.TestCase):
             def capture_assessor_init_args(*args, **kwargs):
                 self.mock_assessor_instance.use_heuristic_shortcut_param = kwargs.get('use_heuristic_shortcut')
                 self.mock_assessor_instance.heuristic_detector_param = kwargs.get('heuristic_detector')
+                # Also capture llm_config and small_model_names for ComplexityAssessor
+                self.mock_assessor_instance.llm_config_param = kwargs.get('llm_config')
+                self.mock_assessor_instance.small_model_names_param = kwargs.get('small_model_names')
                 return self.mock_assessor_instance # Return the configured instance
 
             self.MockComplexityAssessorClass.side_effect = capture_assessor_init_args

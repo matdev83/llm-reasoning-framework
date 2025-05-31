@@ -2,12 +2,13 @@ import unittest
 from unittest.mock import patch, MagicMock, ANY
 
 from src.l2t.orchestrator import L2TOrchestrator
-from src.l2t.dataclasses import L2TConfig, L2TResult, L2TGraph, L2TSolution
+from src.l2t.dataclasses import L2TConfig, L2TResult, L2TGraph, L2TSolution, L2TModelConfigs # Added L2TModelConfigs
 from src.l2t.enums import L2TTriggerMode
 from src.aot.dataclasses import LLMCallStats
 from src.aot.enums import AssessmentDecision
 from src.l2t_orchestrator_utils.oneshot_executor import OneShotExecutor 
 from src.heuristic_detector import HeuristicDetector
+from src.llm_config import LLMConfig # Added LLMConfig
 from typing import Optional
 
 import logging
@@ -25,16 +26,21 @@ class TestL2TOrchestrator(unittest.TestCase):
             max_steps=3,
             classification_model_names=["test-l2t-classifier"],
             thought_generation_model_names=["test-l2t-generator"],
+            initial_prompt_model_names=["test-l2t-initial-prompt-model"], # Added for oneshot_executor
         )
         self.api_key = "test_api_key_for_l2t"
-        self.direct_oneshot_config = {
-            "model_names": ["test-l2t-oneshot-model"],
-            "temperature": 0.6
-        }
-        self.assessment_config = { 
-            "model_names": ["test-l2t-assessment-model"],
-            "temperature": 0.1
-        }
+        
+        # Define LLMConfig objects for various L2T stages
+        self.l2t_model_configs = L2TModelConfigs(
+            initial_thought_config=LLMConfig(temperature=0.7),
+            node_classification_config=LLMConfig(temperature=0.1),
+            node_thought_generation_config=LLMConfig(temperature=0.8),
+            orchestrator_oneshot_config=LLMConfig(temperature=0.6), # For direct one-shot from orchestrator
+            summary_config=LLMConfig(temperature=0.5)
+        )
+        # These are now derived from l2t_config and l2t_model_configs
+        self.direct_oneshot_model_names = self.l2t_config.initial_prompt_model_names # For orchestrator's direct oneshot
+        self.assessment_model_names = self.l2t_config.classification_model_names # For complexity assessor
 
         self.mock_l2t_process_solution = L2TSolution()
         self.mock_l2t_process_solution.final_answer = "Final Answer from Mocked L2TProcess"
@@ -49,7 +55,7 @@ class TestL2TOrchestrator(unittest.TestCase):
 
         self.mock_direct_oneshot_llm_response = "Direct one-shot answer from L2T orchestrator"
         self.mock_direct_oneshot_stats = LLMCallStats(
-            model_name=self.direct_oneshot_config["model_names"][0],
+            model_name=self.direct_oneshot_model_names[0],
             completion_tokens=60, prompt_tokens=110, call_duration_seconds=1.1
         )
 
@@ -87,10 +93,7 @@ class TestL2TOrchestrator(unittest.TestCase):
         return L2TOrchestrator(
             trigger_mode=trigger_mode,
             l2t_config=self.l2t_config,
-            direct_oneshot_model_names=self.direct_oneshot_config["model_names"],
-            direct_oneshot_temperature=self.direct_oneshot_config["temperature"],
-            assessment_model_names=self.assessment_config["model_names"],
-            assessment_temperature=self.assessment_config["temperature"],
+            model_configs=self.l2t_model_configs, # Use L2TModelConfigs object
             api_key=self.api_key,
             use_heuristic_shortcut=use_heuristic_shortcut,
             heuristic_detector=heuristic_detector,
@@ -104,8 +107,7 @@ class TestL2TOrchestrator(unittest.TestCase):
 
         self.MockL2TProcess.assert_called_once_with(
             l2t_config=self.l2t_config,
-            direct_oneshot_model_names=self.direct_oneshot_config["model_names"],
-            direct_oneshot_temperature=self.direct_oneshot_config["temperature"],
+            model_configs=self.l2t_model_configs, # Use L2TModelConfigs object
             api_key=self.api_key,
             enable_rate_limiting=False,
             enable_audit_logging=False
@@ -124,8 +126,8 @@ class TestL2TOrchestrator(unittest.TestCase):
 
         self.MockOneShotExecutor.assert_called_once_with(
             llm_client=ANY, 
-            direct_oneshot_model_names=self.direct_oneshot_config["model_names"],
-            direct_oneshot_temperature=self.direct_oneshot_config["temperature"]
+            direct_oneshot_model_names=self.direct_oneshot_model_names, # Use direct_oneshot_model_names
+            llm_config=self.l2t_model_configs.orchestrator_oneshot_config # Use LLMConfig object
         )
         self.mock_oneshot_executor_instance.run_direct_oneshot.assert_called_once_with(self.problem_text)
         
@@ -145,7 +147,13 @@ class TestL2TOrchestrator(unittest.TestCase):
         orchestrator = self._create_orchestrator(L2TTriggerMode.ASSESS_FIRST)
         solution, summary = orchestrator.solve(self.problem_text)
 
-        self.MockComplexityAssessorClass.assert_called_once() 
+        self.MockComplexityAssessorClass.assert_called_once_with(
+            llm_client=ANY,
+            small_model_names=self.assessment_model_names, # Use assessment_model_names
+            llm_config=self.l2t_model_configs.node_classification_config, # Use LLMConfig object for assessor
+            use_heuristic_shortcut=True,
+            heuristic_detector=ANY
+        ) 
         self.mock_assessor_instance.assess.assert_called_once_with(self.problem_text)
         
         self.MockL2TProcess.assert_called_once() 
@@ -165,10 +173,20 @@ class TestL2TOrchestrator(unittest.TestCase):
         orchestrator = self._create_orchestrator(L2TTriggerMode.ASSESS_FIRST)
         solution, summary = orchestrator.solve(self.problem_text)
 
-        self.MockComplexityAssessorClass.assert_called_once()
+        self.MockComplexityAssessorClass.assert_called_once_with(
+            llm_client=ANY,
+            small_model_names=self.assessment_model_names, # Use assessment_model_names
+            llm_config=self.l2t_model_configs.node_classification_config, # Use LLMConfig object for assessor
+            use_heuristic_shortcut=True,
+            heuristic_detector=ANY
+        )
         self.mock_assessor_instance.assess.assert_called_once_with(self.problem_text)
 
-        self.MockOneShotExecutor.assert_called_once()
+        self.MockOneShotExecutor.assert_called_once_with(
+            llm_client=ANY,
+            direct_oneshot_model_names=self.direct_oneshot_model_names, # Use direct_oneshot_model_names
+            llm_config=self.l2t_model_configs.orchestrator_oneshot_config # Use LLMConfig object
+        )
         self.mock_oneshot_executor_instance.run_direct_oneshot.assert_called_once_with(self.problem_text)
         
         if orchestrator.l2t_process_instance:

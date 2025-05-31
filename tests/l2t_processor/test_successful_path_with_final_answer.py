@@ -11,6 +11,7 @@ from src.l2t.dataclasses import (
     L2TNode,
 )
 from src.aot.dataclasses import LLMCallStats
+from src.llm_config import LLMConfig # Added LLMConfig
 
 from src.llm_client import LLMClient
 from src.l2t_processor_utils.node_processor import NodeProcessor
@@ -20,7 +21,7 @@ import logging
 
 class TestL2TProcessor_SuccessfulPath(unittest.TestCase):
     def setUp(self):
-        self.config = L2TConfig(
+        self.l2t_config = L2TConfig( # Renamed from self.config
             max_steps=5,
             max_total_nodes=10,
             max_time_seconds=60,
@@ -28,6 +29,9 @@ class TestL2TProcessor_SuccessfulPath(unittest.TestCase):
             thought_generation_model_names=["mock-generator"],
             initial_prompt_model_names=["mock-initial"],
         )
+        # Define LLMConfig objects for L2TProcessor
+        self.initial_thought_llm_config = LLMConfig(temperature=0.7)
+        self.node_processor_llm_config = LLMConfig(temperature=0.1)
 
     @patch("src.l2t.processor.L2TResponseParser.parse_l2t_initial_response")
     @patch("src.l2t.processor.LLMClient")
@@ -49,36 +53,47 @@ class TestL2TProcessor_SuccessfulPath(unittest.TestCase):
         MockL2TProcessorLLMClient.return_value.call.return_value = ("Your thought: " + initial_thought_content, stats_initial)
         mock_parse_initial.return_value = initial_thought_content
 
-        processor = L2TProcessor(api_key="mock_api_key", config=self.config)
+        processor = L2TProcessor(
+            api_key="mock_api_key",
+            l2t_config=self.l2t_config, # Use l2t_config
+            initial_thought_llm_config=self.initial_thought_llm_config,
+            node_processor_llm_config=self.node_processor_llm_config,
+        )
 
-        class CustomMockNodeProcessor:
-            def __init__(self):
-                self.call_count = 0
-            def process_node(self, node_id, graph, result_obj, step):
-                if self.call_count == 0:
-                    graph.classify_node(node_id, L2TNodeCategory.CONTINUE)
-                    self._update_result_stats(result_obj, stats_classify1)
-                    self._update_result_stats(result_obj, stats_thought_gen)
-                    graph.add_node(L2TNode(id="child1", content=generated_thought_content, parent_id=node_id, generation_step=1))
-                    graph.move_to_hist(node_id)
-                    if node_id in graph.v_pres:
-                        graph.v_pres.remove(node_id)
-                    graph.v_pres.append("child1")
-                else:
-                    graph.classify_node(node_id, L2TNodeCategory.FINAL_ANSWER)
-                    self._update_result_stats(result_obj, stats_classify2)
-                    setattr(result_obj, 'final_answer', generated_thought_content)
-                    setattr(result_obj, 'succeeded', True)
-                    graph.move_to_hist(node_id)
-                    if node_id in graph.v_pres:
-                        graph.v_pres.remove(node_id)
-                self.call_count += 1
-            def _update_result_stats(self, result_obj, stats):
-                setattr(result_obj, 'total_llm_calls', result_obj.total_llm_calls + 1)
-                setattr(result_obj, 'total_completion_tokens', result_obj.total_completion_tokens + stats.completion_tokens)
-                setattr(result_obj, 'total_prompt_tokens', result_obj.total_prompt_tokens + stats.prompt_tokens)
-                setattr(result_obj, 'total_llm_interaction_time_seconds', result_obj.total_llm_interaction_time_seconds + stats.call_duration_seconds)
-        processor.node_processor = CustomMockNodeProcessor()
+        # Use MagicMock for NodeProcessor and its methods for consistency
+        mock_node_processor_instance = MagicMock(spec=NodeProcessor)
+        processor.node_processor = mock_node_processor_instance
+
+        # Define side effects for the mocked methods
+        def process_node_side_effect(node_id, graph, result_obj, step):
+            if mock_node_processor_instance.process_node.call_count == 1: # First call (for root node)
+                graph.classify_node(node_id, L2TNodeCategory.CONTINUE)
+                mock_node_processor_instance._update_result_stats(result_obj, stats_classify1)
+                mock_node_processor_instance._update_result_stats(result_obj, stats_thought_gen)
+                graph.add_node(L2TNode(id="child1", content=generated_thought_content, parent_id=node_id, generation_step=1))
+                graph.move_to_hist(node_id)
+                # Simulate adding child1 to v_pres for next iteration
+                if node_id in graph.v_pres:
+                    graph.v_pres.remove(node_id)
+                graph.v_pres.append("child1")
+            else: # Second call (for child1 node)
+                graph.classify_node(node_id, L2TNodeCategory.FINAL_ANSWER)
+                mock_node_processor_instance._update_result_stats(result_obj, stats_classify2)
+                setattr(result_obj, 'final_answer', generated_thought_content)
+                setattr(result_obj, 'succeeded', True)
+                graph.move_to_hist(node_id)
+                if node_id in graph.v_pres:
+                    graph.v_pres.remove(node_id)
+        mock_node_processor_instance.process_node.side_effect = process_node_side_effect
+
+        def update_result_stats_side_effect(result_obj, stats):
+            if stats:
+                result_obj.total_llm_calls += 1
+                result_obj.total_completion_tokens += stats.completion_tokens
+                result_obj.total_prompt_tokens += stats.prompt_tokens
+                result_obj.total_llm_interaction_time_seconds += stats.call_duration_seconds
+        mock_node_processor_instance._update_result_stats.side_effect = update_result_stats_side_effect
+
 
         result = processor.run(problem_text)
 

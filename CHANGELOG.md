@@ -4,6 +4,31 @@ This document provides a chronological overview of the key development milestone
 
 ## Commit History
 
+### <COMMIT_ID> - 2025-05-31 - Refactor: Centralize LLM configuration with LLMConfig dataclass
+This commit introduces a new `LLMConfig` dataclass to standardize and centralize the configuration parameters for Large Language Model (LLM) calls across the project.
+
+Key changes include:
+- Moved `llm_config.py` content into `llm_config/__init__.py` to establish `llm_config` as a Python package.
+- Defined `LLMConfig` dataclass with common LLM parameters (temperature, top_p, max_tokens, etc.) and a `to_payload_dict` method for API integration.
+- Updated `AoT` and `L2T` orchestrators and processors to utilize `LLMConfig` objects for LLM calls and component initialization, replacing direct parameter passing (e.g., `temperature`).
+- Introduced `L2TModelConfigs` to group `LLMConfig` objects for different stages within the L2T process, enhancing clarity and maintainability.
+- Modified test files to reflect the new `LLMConfig` usage, ensuring consistency and proper testing of LLM parameter handling.
+
+This refactoring improves code organization, reduces redundancy, and simplifies the management of LLM parameters throughout the application.
+
+**Changes:**
+- Deleted src/llm_config.py
+- Modified src/llm_config/__init__.py
+- Modified tests/aot/test_orchestrator.py
+- Modified tests/l2t/test_l2t_orchestrator.py
+- Modified tests/l2t_processor/test_backtrack_logic.py
+- Modified tests/l2t_processor/test_initial_thought_generation_failure_llm_error.py
+- Modified tests/l2t_processor/test_initial_thought_generation_failure_parsing.py
+- Modified tests/l2t_processor/test_max_steps_reached.py
+- Modified tests/l2t_processor/test_successful_path_with_final_answer.py
+- Modified tests/test_llm_accounting.py
+- Added conftest.py
+
 ### 4c79b22 - 2025-05-29 - docs: Restructure changelog and update project documentation
 **Changes:**
 - Modified CHANGELOG.md

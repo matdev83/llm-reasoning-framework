@@ -9,6 +9,7 @@ import requests # Added this import
 # Assuming llm_client is in src.llm_client
 from src.llm_client import LLMClient
 from src.aot.dataclasses import LLMCallStats # LLMClient returns this
+from src.llm_config import LLMConfig # Added LLMConfig
 
 # Default DB name used by llm-accounting
 DB_NAME = "llm_accounting.db"
@@ -64,9 +65,9 @@ class TestLLMAccountingIntegration(unittest.TestCase):
 
         prompt = "Test prompt for success"
         models = ["test_model_success"]
-        temperature = 0.7
+        llm_config = LLMConfig(temperature=0.7) # Use LLMConfig
         
-        content, stats = self.llm_client.call(prompt, models, temperature)
+        content, stats = self.llm_client.call(prompt, models, llm_config) # Pass LLMConfig
 
         self.assertEqual(content, "Test response")
         self.assertEqual(stats.prompt_tokens, 10)
@@ -116,8 +117,9 @@ class TestLLMAccountingIntegration(unittest.TestCase):
 
         prompt = "Test prompt for API error"
         models = ["test_model_api_error"]
+        llm_config = LLMConfig(temperature=0.7) # Use LLMConfig
         
-        content, stats = self.llm_client.call(prompt, models, 0.7)
+        content, stats = self.llm_client.call(prompt, models, llm_config) # Pass LLMConfig
 
         self.assertTrue(content.startswith("Error: API call to test_model_api_error (HTTP 500)"))
         self.assertEqual(stats.prompt_tokens, 5) # Usage should be captured
@@ -157,8 +159,9 @@ class TestLLMAccountingIntegration(unittest.TestCase):
 
         prompt = "Test prompt for network error"
         models = ["test_model_network_error"]
+        llm_config = LLMConfig(temperature=0.7) # Use LLMConfig
         
-        content, stats = self.llm_client.call(prompt, models, 0.7)
+        content, stats = self.llm_client.call(prompt, models, llm_config) # Pass LLMConfig
 
         self.assertTrue(content.startswith("Error: API call to test_model_network_error timed out"))
         self.assertEqual(stats.prompt_tokens, 0) # No usage info
@@ -224,7 +227,8 @@ class TestLLMAccountingIntegration(unittest.TestCase):
         self.mock_monotonic.side_effect = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
 
 
-        content, stats = self.llm_client.call(prompt, models, 0.7)
+        llm_config = LLMConfig(temperature=0.7) # Use LLMConfig
+        content, stats = self.llm_client.call(prompt, models, llm_config) # Pass LLMConfig
 
         self.assertEqual(content, "Failover successful")
         self.assertEqual(stats.model_name, "model_two_success")

@@ -11,6 +11,7 @@ from src.l2t.dataclasses import (
     L2TNode,
 )
 from src.aot.dataclasses import LLMCallStats
+from src.llm_config import LLMConfig # Added LLMConfig
 
 from src.llm_client import LLMClient
 from src.l2t_processor_utils.node_processor import NodeProcessor
@@ -21,7 +22,7 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 
 class TestL2TProcessor_BacktrackLogic(unittest.TestCase):
     def setUp(self):
-        self.config = L2TConfig(
+        self.l2t_config = L2TConfig( # Renamed from self.config
             max_steps=5,  # Allow enough steps for backtracking and re-exploration
             max_total_nodes=10,
             max_time_seconds=60,
@@ -29,6 +30,10 @@ class TestL2TProcessor_BacktrackLogic(unittest.TestCase):
             thought_generation_model_names=["mock-generator"],
             initial_prompt_model_names=["mock-initial"],
         )
+        # Define LLMConfig objects for L2TProcessor
+        self.initial_thought_llm_config = LLMConfig(temperature=0.7)
+        self.node_processor_llm_config = LLMConfig(temperature=0.1)
+
 
     @patch("src.l2t.processor.L2TResponseParser.parse_l2t_initial_response")
     @patch("src.l2t.processor.LLMClient")
@@ -48,7 +53,12 @@ class TestL2TProcessor_BacktrackLogic(unittest.TestCase):
         mock_llm_client_instance = MockL2TProcessorLLMClient.return_value
         mock_llm_client_instance.call.return_value = ("Your thought: " + initial_thought_content, MagicMock(spec=LLMCallStats))
 
-        processor = L2TProcessor(api_key="mock_api_key", config=self.config)
+        processor = L2TProcessor(
+            api_key="mock_api_key",
+            l2t_config=self.l2t_config, # Use l2t_config
+            initial_thought_llm_config=self.initial_thought_llm_config,
+            node_processor_llm_config=self.node_processor_llm_config,
+        )
 
         # Attributes to keep track of node IDs across mock calls
         self.root_node_id = None
