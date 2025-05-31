@@ -3,6 +3,7 @@ import uuid
 from typing import Optional, Tuple
 
 from src.llm_client import LLMClient
+from src.llm_config import LLMConfig # Added
 from src.aot.dataclasses import LLMCallStats
 from src.l2t.dataclasses import L2TConfig, L2TGraph, L2TNode, L2TNodeCategory, L2TResult
 from src.l2t.prompt_generator import L2TPromptGenerator
@@ -11,10 +12,11 @@ from src.l2t.response_parser import L2TResponseParser
 logger = logging.getLogger(__name__)
 
 class NodeProcessor:
-    def __init__(self, llm_client: LLMClient, config: L2TConfig, prompt_generator: L2TPromptGenerator):
+    def __init__(self, llm_client: LLMClient, l2t_config: L2TConfig, prompt_generator: L2TPromptGenerator, llm_config: LLMConfig): # Modified
         self.llm_client = llm_client
-        self.config = config
+        self.l2t_config = l2t_config # Modified
         self.prompt_generator = prompt_generator
+        self.llm_config = llm_config # Added
 
     def process_node(self, node_id_to_classify: str, graph: L2TGraph, result: L2TResult, current_process_step: int) -> None:
         node_to_classify = graph.get_node(node_id_to_classify)
@@ -32,11 +34,11 @@ class NodeProcessor:
 
         # Calculate remaining steps and check for budget hint
         remaining_steps_hint: Optional[int] = None
-        if self.config.pass_remaining_steps_pct is not None and self.config.max_steps > 0:
-            remaining_steps = self.config.max_steps - current_process_step
-            if remaining_steps <= (self.config.max_steps * self.config.pass_remaining_steps_pct):
+        if self.l2t_config.pass_remaining_steps_pct is not None and self.l2t_config.max_steps > 0: # Modified
+            remaining_steps = self.l2t_config.max_steps - current_process_step # Modified
+            if remaining_steps <= (self.l2t_config.max_steps * self.l2t_config.pass_remaining_steps_pct): # Modified
                 remaining_steps_hint = remaining_steps
-                logger.info(f"Budget hint: {remaining_steps} steps remaining (threshold {self.config.pass_remaining_steps_pct*100}%).")
+                logger.info(f"Budget hint: {remaining_steps} steps remaining (threshold {self.l2t_config.pass_remaining_steps_pct*100}%).") # Modified
 
         # Node Classification
         parent_node = graph.get_parent(node_to_classify.id)
@@ -63,7 +65,7 @@ class NodeProcessor:
         classification_prompt = self.prompt_generator.construct_l2t_node_classification_prompt(
             graph_context_for_classification,
             node_to_classify.content,
-            self.config.x_eva_default,
+            self.l2t_config.x_eva_default, # Modified
             remaining_steps_hint
         )
         (
@@ -71,8 +73,8 @@ class NodeProcessor:
             classification_stats,
         ) = self.llm_client.call(
             classification_prompt,
-            models=self.config.classification_model_names,
-            temperature=self.config.classification_temperature,
+            models=self.l2t_config.classification_model_names, # Modified
+            config=self.llm_config, # Modified
         )
         self._update_result_stats(result, classification_stats)
         node_category = L2TResponseParser.parse_l2t_node_classification_response(
@@ -85,7 +87,7 @@ class NodeProcessor:
                 f"Defaulting to TERMINATE_BRANCH. Response: {classification_response_content}"
             )
             node_category = L2TNodeCategory.TERMINATE_BRANCH
-        
+
         graph.classify_node(node_to_classify.id, node_category)
         logger.info(f"Node {node_to_classify.id} classified as {node_category.name}")
 
@@ -98,8 +100,8 @@ class NodeProcessor:
             thought_gen_prompt = self.prompt_generator.construct_l2t_thought_generation_prompt(
                 thought_gen_context,
                 node_to_classify.content,
-                self.config.x_fmt_default,
-                self.config.x_eva_default,
+                self.l2t_config.x_fmt_default, # Modified
+                self.l2t_config.x_eva_default, # Modified
                 remaining_steps_hint
             )
             (
@@ -107,8 +109,8 @@ class NodeProcessor:
                 new_thought_stats,
             ) = self.llm_client.call(
                 thought_gen_prompt,
-                models=self.config.thought_generation_model_names,
-                temperature=self.config.thought_generation_temperature,
+                models=self.l2t_config.thought_generation_model_names, # Modified
+                config=self.llm_config, # Modified
             )
             self._update_result_stats(result, new_thought_stats)
             new_thought_content = L2TResponseParser.parse_l2t_thought_generation_response(
@@ -132,19 +134,19 @@ class NodeProcessor:
                 logger.info(
                     f"Generated new thought node {new_node_id} (gen_step {new_node.generation_step}) from parent {node_to_classify.id}"
                 )
-        
+
         elif node_category == L2TNodeCategory.FINAL_ANSWER:
             result.final_answer = node_to_classify.content
             result.succeeded = True
             logger.info(
                 f"Final answer found at node {node_to_classify.id}: {result.final_answer[:100]}..."
             )
-        
+
         elif node_category == L2TNodeCategory.TERMINATE_BRANCH:
             logger.info(
                 f"Terminating branch at node {node_to_classify.id}: '{node_to_classify.content[:100]}...'"
             )
-        
+
         elif node_category == L2TNodeCategory.BACKTRACK:
             logger.info(f"Backtrack requested at node {node_to_classify.id}.")
             parent_node = graph.get_parent(node_to_classify.id)
@@ -154,7 +156,7 @@ class NodeProcessor:
                 logger.info(f"Parent node {parent_node.id} re-added to v_pres for re-exploration.")
             else:
                 logger.info(f"Node {node_to_classify.id} is a root node or has no parent. Cannot backtrack further.")
-            
+
             # The current node that led to BACKTRACK is considered processed (unfruitful path)
             graph.move_to_hist(node_id_to_classify)
 

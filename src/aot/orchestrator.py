@@ -7,6 +7,7 @@ from src.reasoning_process import ReasoningProcess # Import the base class
 from .enums import AotTriggerMode, AssessmentDecision
 from .dataclasses import LLMCallStats, AoTRunnerConfig, Solution
 from src.llm_client import LLMClient
+from src.llm_config import LLMConfig
 from src.complexity_assessor import ComplexityAssessor
 from .processor import AoTProcessor
 from src.heuristic_detector import HeuristicDetector
@@ -20,23 +21,32 @@ class AoTProcess(ReasoningProcess):
     running the AoTProcessor and handling fallbacks to a direct one-shot call if AoT fails.
     """
     def __init__(self,
-                 aot_config: AoTRunnerConfig,
-                 direct_oneshot_model_names: List[str], # For fallback
-                 direct_oneshot_temperature: float,    # For fallback
+                 aot_runner_config: AoTRunnerConfig, # Renamed for clarity from self.aot_config
+                 direct_oneshot_model_names: List[str],
+                 direct_oneshot_llm_config: LLMConfig, # Changed
                  api_key: str,
                  enable_rate_limiting: bool = True,
                  enable_audit_logging: bool = True):
 
-        self.aot_config = aot_config
+        self.aot_runner_config = aot_runner_config # Storing the runner config
         self.direct_oneshot_model_names = direct_oneshot_model_names
-        self.direct_oneshot_temperature = direct_oneshot_temperature
+        self.direct_oneshot_llm_config = direct_oneshot_llm_config # Changed
         
         self.llm_client = LLMClient( # AoTProcess has its own LLMClient
             api_key=api_key,
             enable_rate_limiting=enable_rate_limiting,
             enable_audit_logging=enable_audit_logging
         )
-        self.aot_processor = AoTProcessor(llm_client=self.llm_client, config=self.aot_config)
+        # Prepare LLMConfig for AoTProcessor using AoTRunnerConfig
+        aot_processor_llm_config = LLMConfig(
+            temperature=self.aot_runner_config.temperature,
+            # model names are not part of LLMConfig, AoTProcessor will get them from AoTRunnerConfig
+        )
+        self.aot_processor = AoTProcessor(
+            llm_client=self.llm_client,
+            runner_config=self.aot_runner_config, # Pass the original runner_config
+            llm_config=aot_processor_llm_config # Pass the new llm_config
+        )
         
         self._solution: Optional[Solution] = None
         self._process_summary: Optional[str] = None
@@ -45,10 +55,11 @@ class AoTProcess(ReasoningProcess):
         # This method is for AoTProcess's internal use (e.g., fallback)
         mode = "FALLBACK ONESHOT (AoTProcess)" if is_fallback else "ONESHOT (AoTProcess)"
         logging.info(f"--- Proceeding with {mode} Answer ---")
-        logging.info(f"Using models: {', '.join(self.direct_oneshot_model_names)}, Temperature: {self.direct_oneshot_temperature}")
+        # Temperature is now in self.direct_oneshot_llm_config
+        logging.info(f"Using models: {', '.join(self.direct_oneshot_model_names)}, Config: {self.direct_oneshot_llm_config}")
         
         response_content, stats = self.llm_client.call(
-            prompt=problem_text, models=self.direct_oneshot_model_names, temperature=self.direct_oneshot_temperature
+            prompt=problem_text, models=self.direct_oneshot_model_names, config=self.direct_oneshot_llm_config # Changed
         )
         logging.debug(f"Direct {mode} response from {stats.model_name}:\n{response_content}")
         logging.info(f"LLM call ({stats.model_name}) for {mode}: Duration: {stats.call_duration_seconds:.2f}s, Tokens (C:{stats.completion_tokens}, P:{stats.prompt_tokens})")
@@ -131,21 +142,21 @@ class AoTProcess(ReasoningProcess):
 class InteractiveAoTOrchestrator: # Renamed from AoTOrchestrator for clarity
     def __init__(self,
                  trigger_mode: AotTriggerMode,
-                 aot_config: AoTRunnerConfig, 
+                 aot_runner_config: AoTRunnerConfig, # Renamed for clarity
                  direct_oneshot_model_names: List[str],
-                 direct_oneshot_temperature: float,
-                 assessment_model_names: List[str], 
-                 assessment_temperature: float,   
+                 direct_oneshot_llm_config: LLMConfig, # Changed
+                 assessment_model_names: List[str],
+                 assessment_llm_config: LLMConfig, # Changed
                  api_key: str,
                  use_heuristic_shortcut: bool = True,
                  heuristic_detector: Optional[HeuristicDetector] = None,
-                 enable_rate_limiting: bool = True, 
+                 enable_rate_limiting: bool = True,
                  enable_audit_logging: bool = True):
 
         self.trigger_mode = trigger_mode
         self.use_heuristic_shortcut = use_heuristic_shortcut
-        self.direct_oneshot_model_names = direct_oneshot_model_names 
-        self.direct_oneshot_temperature = direct_oneshot_temperature
+        self.direct_oneshot_model_names = direct_oneshot_model_names
+        self.direct_oneshot_llm_config = direct_oneshot_llm_config # Changed
         
         self.llm_client = LLMClient( # For orchestrator's direct calls & assessor
             api_key=api_key,
@@ -158,20 +169,20 @@ class InteractiveAoTOrchestrator: # Renamed from AoTOrchestrator for clarity
         if self.trigger_mode == AotTriggerMode.ASSESS_FIRST:
             self.complexity_assessor = ComplexityAssessor(
                 llm_client=self.llm_client,
-                small_model_names=assessment_model_names,
-                temperature=assessment_temperature,
-                use_heuristic_shortcut=self.use_heuristic_shortcut, 
-                heuristic_detector=self.heuristic_detector 
+                small_model_names=assessment_model_names, # Kept small_model_names
+                llm_config=assessment_llm_config, # Changed
+                use_heuristic_shortcut=self.use_heuristic_shortcut,
+                heuristic_detector=self.heuristic_detector
             )
         
         self.aot_process_instance: Optional[AoTProcess] = None
         # Instantiate AoTProcess if AoT is a possibility based on trigger_mode
         if self.trigger_mode == AotTriggerMode.ALWAYS_AOT or self.trigger_mode == AotTriggerMode.ASSESS_FIRST:
             self.aot_process_instance = AoTProcess(
-                aot_config=aot_config, 
-                direct_oneshot_model_names=direct_oneshot_model_names, 
-                direct_oneshot_temperature=direct_oneshot_temperature, 
-                api_key=api_key, 
+                aot_runner_config=aot_runner_config, # Pass AoTRunnerConfig
+                direct_oneshot_model_names=direct_oneshot_model_names,
+                direct_oneshot_llm_config=direct_oneshot_llm_config, # Pass direct one-shot config
+                api_key=api_key,
                 enable_rate_limiting=enable_rate_limiting,
                 enable_audit_logging=enable_audit_logging
             )
@@ -181,10 +192,11 @@ class InteractiveAoTOrchestrator: # Renamed from AoTOrchestrator for clarity
         # This method is for InteractiveAoTOrchestrator's own direct one-shot calls.
         mode = "FALLBACK ONESHOT (Orchestrator)" if is_fallback else "ONESHOT (Orchestrator)"
         logging.info(f"--- Proceeding with {mode} Answer ---")
-        logging.info(f"Using models: {', '.join(self.direct_oneshot_model_names)}, Temperature: {self.direct_oneshot_temperature}")
+        # Temperature is now in self.direct_oneshot_llm_config
+        logging.info(f"Using models: {', '.join(self.direct_oneshot_model_names)}, Config: {self.direct_oneshot_llm_config}")
         
         response_content, stats = self.llm_client.call( 
-            prompt=problem_text, models=self.direct_oneshot_model_names, temperature=self.direct_oneshot_temperature
+            prompt=problem_text, models=self.direct_oneshot_model_names, config=self.direct_oneshot_llm_config # Changed
         )
         logging.debug(f"Direct {mode} response from {stats.model_name}:\n{response_content}")
         logging.info(f"LLM call ({stats.model_name}) for {mode}: Duration: {stats.call_duration_seconds:.2f}s, Tokens (C:{stats.completion_tokens}, P:{stats.prompt_tokens})")

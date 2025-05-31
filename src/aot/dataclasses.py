@@ -4,7 +4,7 @@ from .enums import AssessmentDecision
 
 from .constants import (
     DEFAULT_MAIN_MODEL_NAMES, DEFAULT_MAX_STEPS, DEFAULT_MAX_TIME_SECONDS,
-    DEFAULT_NO_PROGRESS_LIMIT, DEFAULT_MAIN_TEMPERATURE
+    DEFAULT_NO_PROGRESS_LIMIT, DEFAULT_MAIN_TEMPERATURE # DEFAULT_MAIN_TEMPERATURE will be unused here after removal
 )
 
 @dataclass
@@ -26,7 +26,7 @@ class ParsedLLMOutput:
 @dataclass
 class AoTRunnerConfig:
     main_model_names: List[str] = field(default_factory=lambda: list(DEFAULT_MAIN_MODEL_NAMES))
-    temperature: float = DEFAULT_MAIN_TEMPERATURE
+    # temperature: float = DEFAULT_MAIN_TEMPERATURE # REMOVED
     max_steps: int = DEFAULT_MAX_STEPS
     max_reasoning_tokens: Optional[int] = None
     max_time_seconds: int = DEFAULT_MAX_TIME_SECONDS

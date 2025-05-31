@@ -4,20 +4,27 @@ from typing import Dict, List, Optional
 
 from src.aot.dataclasses import LLMCallStats # Import LLMCallStats
 from src.aot.enums import AssessmentDecision # Import AssessmentDecision
+from src.llm_config import LLMConfig # Make sure this import is added
 from .enums import L2TTriggerMode # Import L2TTriggerMode
 
+# Import constants for L2TModelConfigs.from_l2t_config default values
 from .constants import (
     DEFAULT_L2T_CLASSIFICATION_MODEL_NAMES,
-    DEFAULT_L2T_CLASSIFICATION_TEMPERATURE,
+    # DEFAULT_L2T_CLASSIFICATION_TEMPERATURE, # Removed, will be in LLMConfig
     DEFAULT_L2T_INITIAL_PROMPT_MODEL_NAMES,
-    DEFAULT_L2T_INITIAL_PROMPT_TEMPERATURE,
+    # DEFAULT_L2T_INITIAL_PROMPT_TEMPERATURE, # Removed, will be in LLMConfig
     DEFAULT_L2T_MAX_STEPS,
     DEFAULT_L2T_MAX_TIME_SECONDS,
     DEFAULT_L2T_MAX_TOTAL_NODES,
     DEFAULT_L2T_THOUGHT_GENERATION_MODEL_NAMES,
-    DEFAULT_L2T_THOUGHT_GENERATION_TEMPERATURE,
+    # DEFAULT_L2T_THOUGHT_GENERATION_TEMPERATURE, # Removed, will be in LLMConfig
     DEFAULT_L2T_X_EVA_DEFAULT,
     DEFAULT_L2T_X_FMT_DEFAULT,
+    # Need to ensure these are available if from_l2t_config uses them directly
+    # For the from_l2t_config method, we'll use the actual default temperature values from constants.py
+    DEFAULT_L2T_INITIAL_PROMPT_TEMPERATURE,
+    DEFAULT_L2T_CLASSIFICATION_TEMPERATURE,
+    DEFAULT_L2T_THOUGHT_GENERATION_TEMPERATURE,
 )
 
 
@@ -70,19 +77,14 @@ class L2TGraph:
         if node_id not in self.nodes:
             raise ValueError(f"Node with id {node_id} not found.")
         if node_id not in self.v_pres:
-            # Could be already moved or never added to v_pres (e.g. if added manually for testing)
             if node_id not in self.v_hist:
                  raise ValueError(f"Node {node_id} not in v_pres to move to v_hist.")
-            return # Already in v_hist, do nothing
+            return
         self.v_pres.remove(node_id)
         if node_id not in self.v_hist:
             self.v_hist.append(node_id)
 
     def re_add_to_v_pres(self, node_id: str) -> None:
-        """
-        Ensures a node is in v_pres (unprocessed) and not in v_hist (processed).
-        Useful for backtracking where a parent node needs to be re-evaluated.
-        """
         if node_id not in self.nodes:
             raise ValueError(f"Node with id {node_id} not found in graph.")
         
@@ -92,7 +94,6 @@ class L2TGraph:
         if node_id not in self.v_pres:
             self.v_pres.append(node_id)
         
-        # Reset the node's category so it can be re-processed and re-classified
         self.nodes[node_id].category = None
 
     def get_node(self, node_id: str) -> Optional[L2TNode]:
@@ -112,7 +113,7 @@ class L2TGraph:
 
 
 @dataclass
-class L2TConfig:
+class L2TConfig: # Modified: Removed temperature fields
     classification_model_names: List[str] = field(
         default_factory=lambda: DEFAULT_L2T_CLASSIFICATION_MODEL_NAMES
     )
@@ -122,15 +123,41 @@ class L2TConfig:
     initial_prompt_model_names: List[str] = field(
         default_factory=lambda: DEFAULT_L2T_INITIAL_PROMPT_MODEL_NAMES
     )
-    classification_temperature: float = DEFAULT_L2T_CLASSIFICATION_TEMPERATURE
-    thought_generation_temperature: float = DEFAULT_L2T_THOUGHT_GENERATION_TEMPERATURE
-    initial_prompt_temperature: float = DEFAULT_L2T_INITIAL_PROMPT_TEMPERATURE
+    # classification_temperature: float = DEFAULT_L2T_CLASSIFICATION_TEMPERATURE # REMOVED
+    # thought_generation_temperature: float = DEFAULT_L2T_THOUGHT_GENERATION_TEMPERATURE # REMOVED
+    # initial_prompt_temperature: float = DEFAULT_L2T_INITIAL_PROMPT_TEMPERATURE # REMOVED
     max_steps: int = DEFAULT_L2T_MAX_STEPS
     max_total_nodes: int = DEFAULT_L2T_MAX_TOTAL_NODES
     max_time_seconds: int = DEFAULT_L2T_MAX_TIME_SECONDS
     x_fmt_default: str = DEFAULT_L2T_X_FMT_DEFAULT
     x_eva_default: str = DEFAULT_L2T_X_EVA_DEFAULT
-    pass_remaining_steps_pct: Optional[float] = None # New parameter for budget hints
+    pass_remaining_steps_pct: Optional[float] = None
+
+
+@dataclass
+class L2TModelConfigs:
+    initial_thought_config: LLMConfig = field(default_factory=LLMConfig)
+    node_classification_config: LLMConfig = field(default_factory=LLMConfig)
+    node_thought_generation_config: LLMConfig = field(default_factory=LLMConfig)
+    orchestrator_oneshot_config: LLMConfig = field(default_factory=LLMConfig)
+    summary_config: LLMConfig = field(default_factory=LLMConfig)
+
+    @classmethod
+    def from_l2t_config(cls, l2t_config: L2TConfig) -> 'L2TModelConfigs':
+        # Uses the default temperatures imported from .constants
+        # Note: l2t_config no longer holds these temperatures directly.
+        # This method might need rethinking if it's meant to transfer old L2TConfig temps
+        # to new L2TModelConfigs. For now, it uses the global defaults for temperatures.
+        # If the goal was to use temperatures from an *old* L2TConfig instance, that instance
+        # would need to be passed before its temperature fields are removed.
+        # Assuming for now it populates with default temperatures for newly created configs.
+        return cls(
+            initial_thought_config=LLMConfig(temperature=DEFAULT_L2T_INITIAL_PROMPT_TEMPERATURE),
+            node_classification_config=LLMConfig(temperature=DEFAULT_L2T_CLASSIFICATION_TEMPERATURE),
+            node_thought_generation_config=LLMConfig(temperature=DEFAULT_L2T_THOUGHT_GENERATION_TEMPERATURE),
+            orchestrator_oneshot_config=LLMConfig(temperature=DEFAULT_L2T_INITIAL_PROMPT_TEMPERATURE),
+            summary_config=LLMConfig(temperature=DEFAULT_L2T_INITIAL_PROMPT_TEMPERATURE)
+        )
 
 
 @dataclass
@@ -148,35 +175,18 @@ class L2TResult:
 
 @dataclass
 class L2TSolution:
-    """
-    Represents the overall solution and statistics from the L2T Orchestrator,
-    which might involve an assessment, a direct one-shot call, or the full L2T process.
-    """
     final_answer: Optional[str] = None
     total_wall_clock_time_seconds: float = 0.0
-
-    # Assessment related
     assessment_stats: Optional[LLMCallStats] = None
     assessment_decision: Optional[AssessmentDecision] = None
-
-    # Direct one-shot related (if L2T is bypassed or not triggered)
     main_call_stats: Optional[LLMCallStats] = None
-
-    # L2T process related
     l2t_result: Optional[L2TResult] = None
-    l2t_summary_output: Optional[str] = None # The summary string from L2TProcessor
-
-    # Fallback related (if L2T fails or assessment fails)
+    l2t_summary_output: Optional[str] = None
     l2t_failed_and_fell_back: bool = False
     fallback_call_stats: Optional[LLMCallStats] = None
 
     @property
     def succeeded(self) -> bool:
-        """
-        Determines if the overall L2T orchestration process succeeded.
-        This is true if a final answer was obtained, either directly,
-        via L2T process, or via a fallback one-shot.
-        """
         return self.final_answer is not None
 
     @property

@@ -9,6 +9,7 @@ from llm_accounting.backends.sqlite import SQLiteBackend
 
 from src.aot.dataclasses import LLMCallStats
 from src.aot.constants import OPENROUTER_API_URL, HTTP_REFERER, APP_TITLE
+from src.llm_config import LLMConfig # Added import
 
 class LLMClient:
     def __init__(self, api_key: str, api_url: str = OPENROUTER_API_URL, http_referer: str = HTTP_REFERER, app_title: str = APP_TITLE,
@@ -29,7 +30,7 @@ class LLMClient:
         self.enable_audit_logging = enable_audit_logging
         self.audit_logger = AuditLogger(backend=sqlite_backend_instance) if enable_audit_logging else None
 
-    def call(self, prompt: str, models: List[str], temperature: float) -> Tuple[str, LLMCallStats]:
+    def call(self, prompt: str, models: List[str], config: LLMConfig) -> Tuple[str, LLMCallStats]: # temperature changed to config
         if not models:
             logging.error("No models provided for LLM call.")
             return "Error: No models configured for call.", LLMCallStats(model_name="N/A")
@@ -39,11 +40,11 @@ class LLMClient:
         request_id = None # Initialize request_id
 
         for model_name in models:
+            # Construct payload using LLMConfig
             payload = {
                 "model": model_name,
                 "messages": [{"role": "user", "content": prompt}],
-                "temperature": temperature,
-                "reasoning": {"effort": "high"} 
+                **config.to_payload_dict() # Unpack parameters from config
             }
             current_call_stats = LLMCallStats(model_name=model_name)
             call_start_time = time.monotonic()

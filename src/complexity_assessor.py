@@ -4,6 +4,7 @@ from typing import List, Tuple
 from src.aot.dataclasses import LLMCallStats
 from src.aot.enums import AssessmentDecision
 from src.llm_client import LLMClient
+from src.llm_config import LLMConfig # Added
 from src.prompt_generator import PromptGenerator
 from src.heuristic_detector import HeuristicDetector # Import the new class
 from typing import Optional # Import Optional
@@ -11,10 +12,10 @@ from typing import Optional # Import Optional
 logger = logging.getLogger(__name__)
 
 class ComplexityAssessor:
-    def __init__(self, llm_client: LLMClient, small_model_names: List[str], temperature: float, use_heuristic_shortcut: bool = True, heuristic_detector: Optional[HeuristicDetector] = None):
+    def __init__(self, llm_client: LLMClient, small_model_names: List[str], llm_config: LLMConfig, use_heuristic_shortcut: bool = True, heuristic_detector: Optional[HeuristicDetector] = None): # Modified
         self.llm_client = llm_client
         self.small_model_names = small_model_names
-        self.temperature = temperature
+        self.llm_config = llm_config # Added
         self.use_heuristic_shortcut = use_heuristic_shortcut
         self.heuristic_detector = heuristic_detector if heuristic_detector is not None else HeuristicDetector()
 
@@ -35,7 +36,7 @@ class ComplexityAssessor:
         logging.info(f"--- Initial Complexity Assessment using models: {', '.join(self.small_model_names)} ---")
         assessment_prompt = PromptGenerator.construct_assessment_prompt(problem_text)
         response_content, stats = self.llm_client.call(
-            prompt=assessment_prompt, models=self.small_model_names, temperature=self.temperature
+            prompt=assessment_prompt, models=self.small_model_names, config=self.llm_config # Modified
         )
         logging.debug(f"Assessment model ({stats.model_name}) raw response: '{response_content.strip()}'")
         logging.info(f"Assessment call: {stats.model_name}, Duration: {stats.call_duration_seconds:.2f}s, Tokens (C:{stats.completion_tokens}, P:{stats.prompt_tokens})")
