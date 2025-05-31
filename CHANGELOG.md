@@ -4,7 +4,7 @@ This document provides a chronological overview of the key development milestone
 
 ## Commit History
 
-### <COMMIT_ID> - 2025-05-31 - Refactor: Centralize LLM configuration with LLMConfig dataclass
+### adcf919 - 2025-05-31 - Refactor: Centralize LLM configuration with LLMConfig dataclass
 This commit introduces a new `LLMConfig` dataclass to standardize and centralize the configuration parameters for Large Language Model (LLM) calls across the project.
 
 Key changes include:
