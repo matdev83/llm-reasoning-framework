@@ -3,7 +3,7 @@
 This document provides a chronological overview of the key development milestones, tasks, and significant refactors in this project.
 
 ## Commit History
-### <COMMIT_HASH> - 2025-05-31 - Refactor: Integrate llm-accounting directly and remove dummy classes
+### b06d6a2 - 2025-05-31 - Refactor: Integrate llm-accounting directly and remove dummy classes
 **Changes:**
 - Modified src/llm_client.py
 - Modified tests/test_llm_accounting.py
