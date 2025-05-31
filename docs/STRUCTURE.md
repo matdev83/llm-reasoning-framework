@@ -9,12 +9,13 @@ This document outlines the directory and file structure of the Modular LLM Reaso
 *   `LICENSE`: Contains the project's licensing information (MIT License).
 *   `pyproject.toml`, `setup.py`, `requirements.txt`: Python project configuration, dependency management, and packaging metadata.
 *   `README.md`: Comprehensive project overview, key features, installation instructions, usage examples, CLI parameters, and development guidelines.
-*   `CHANGELOG.md`: A chronological overview of the key development milestones, tasks, and significant refactors in this project.instructions, usage examples, CLI parameters, and development guidelines.
+*   `CHANGELOG.md`: A chronological overview of the key development milestones, tasks, and significant refactors in this project.
 *   `conf/`: Contains configuration files, prompt templates, and example user prompts.
 *   `context7-mcp/`: Contains MCP server configuration and tools for Context7 integration.
 *   `data/`: Stores runtime data, notably the `accounting.sqlite` database for LLM call auditing.
 *   `docs/`: Project documentation, including this file (`STRUCTURE.md`) and `l2t_paper.md`.
 *   `src/`: The core source code of the framework.
+*   `update_changelog.py`: A utility script to automate updates to the `CHANGELOG.md` file.
 *   `tests/`: Contains unit and integration tests for the project components.
 
 ## `src/` - Core Source Code
@@ -28,7 +29,7 @@ This directory houses the main logic and components of the LLM Reasoning Framewo
 *   `heuristic_detector.py`: Provides a top-level entry point for the heuristic detection mechanism.
 *   `prompt_generator.py`: A generic component responsible for constructing prompts sent to LLMs.
 *   `response_parser.py`: A generic component for parsing and extracting information from LLM responses.
-*   `reasoning_process.py`: Likely an abstract base class or a utility module defining common interfaces or functionalities for different reasoning processes (e.g., AoT, L2T).
+*   `reasoning_process.py`: An abstract base class defining common interfaces for different reasoning processes (e.g., AoT, L2T, Hybrid).
 
 ### `src/aot/` - Algorithm of Thoughts (AoT) Implementation
 
@@ -68,6 +69,17 @@ Utility modules supporting the L2T processor.
 
 *   `__init__.py`: Initializes the `l2t_processor_utils` package.
 *   `node_processor.py`: Manages the processing and classification of nodes within the L2T reasoning graph.
+
+### `src/hybrid/` - Hybrid Reasoning Implementation
+
+Modules specifically designed for the Hybrid reasoning strategy.
+
+*   `__init__.py`: Initializes the `hybrid` package.
+*   `orchestrator.py`: Orchestrates the overall Hybrid problem-solving flow.
+*   `processor.py`: Implements the core logic for the Hybrid reasoning process.
+*   `constants.py`: Defines constants used within the Hybrid implementation.
+*   `dataclasses.py`: Contains data classes for structuring Hybrid-specific data.
+*   `enums.py`: Defines enumerations relevant to the Hybrid process.
 
 ### `src/heuristic_detector/` - Local Heuristic Analysis
 

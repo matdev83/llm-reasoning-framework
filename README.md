@@ -2,7 +2,7 @@
 
 This project provides a flexible and modular framework for orchestrating diverse Large Language Model (LLM) reasoning strategies. It enables the breakdown of complex tasks into manageable steps, manages LLM interactions, and dynamically adapts problem-solving approaches based on complexity and resource constraints.
 
-This framework is designed to support various iterative and adaptive reasoning patterns, including Algorithm of Thoughts (AoT) and Learn to Think (L2T). AoT, for instance, is a prompting strategy that aims to reduce hallucinations by first providing an answer and then explaining the reasoning. This approach can be particularly useful for complex problems, revealing the model's initial instincts versus its rationalizations. For more details on AoT, refer to the [Order Matters in Hallucination](https://arxiv.org/html/2408.05093v1) paper by Zikai Xie. L2T, on the other hand, focuses on generating and classifying thoughts to build a reasoning graph.
+This framework is designed to support various iterative and adaptive reasoning patterns, including Algorithm of Thoughts (AoT), Learn to Think (L2T), and a novel Hybrid approach. AoT, for instance, is a prompting strategy that aims to reduce hallucinations by first providing an answer and then explaining the reasoning. This approach can be particularly useful for complex problems, revealing the model's initial instincts versus its rationalizations. For more details on AoT, refer to the [Order Matters in Hallucination](https://arxiv.org/html/2408.05093v1) paper by Zikai Xie. L2T, on the other hand, focuses on generating and classifying thoughts to build a reasoning graph.
 
 ## Key Features & Flows
 
@@ -67,6 +67,71 @@ python -m src.cli_runner --processing-mode aot_direct --problem "Design a simple
 
 # Example: Directly run L2TProcess
 python -m src.cli_runner --processing-mode l2t_direct --problem "How does quantum computing work?" --l2t-max-steps 10
+
+# Example: Directly run HybridProcess
+python -m src.cli_runner --processing-mode hybrid_direct --problem "Explain the concept of recursion with a Python example." --max-steps 5
+```
+
+### Hybrid Reasoning Process
+
+The Hybrid Reasoning Process is a novel approach that combines elements of different reasoning strategies to tackle complex problems. Unlike traditional Chain-of-Thought (CoT) variants that primarily focus on sequential thought generation, the Hybrid process dynamically adapts its strategy based on the problem's evolving context and intermediate results. It is designed to be more flexible and robust, integrating various sub-processes and decision points to navigate intricate problem spaces.
+
+This process is not a simple CoT variant; instead, it leverages a combination of:
+-   **Dynamic Sub-problem Decomposition**: Breaking down the main problem into smaller, manageable sub-problems as needed.
+-   **Adaptive Strategy Selection**: Choosing the most appropriate sub-strategy (e.g., direct answer, iterative refinement, knowledge retrieval) for each sub-problem.
+-   **Contextual Integration**: Continuously integrating new information and insights gained from solving sub-problems back into the overall reasoning context.
+-   **Iterative Refinement**: Refining answers through multiple passes, incorporating feedback or new data.
+
+The Hybrid process aims to mimic a more human-like problem-solving approach, where different cognitive tools are employed as the situation demands, rather than adhering to a rigid, pre-defined sequence of thoughts.
+
+**How it works:**
+The `src.hybrid.orchestrator.HybridOrchestrator` manages the overall flow, while `src.hybrid.processor.HybridProcessor` implements the core logic. The processor iteratively:
+1.  Analyzes the current problem state and available information.
+2.  Determines the next best action or sub-strategy to apply.
+3.  Executes the chosen sub-strategy, which might involve:
+    *   Making direct LLM calls for specific questions.
+    *   Initiating a mini-iterative process for a complex sub-problem.
+    *   Retrieving relevant information from internal or external sources.
+4.  Integrates the results back into the main reasoning context.
+5.  Continues until a satisfactory final answer is reached or resource limits are met.
+
+**Usage via CLI:**
+You can directly invoke the Hybrid process using the `--processing-mode hybrid_direct` flag:
+```bash
+python -m src.cli_runner --processing-mode hybrid_direct --problem "Design a secure authentication system for a web application, considering common vulnerabilities." --main-models "gpt-4o" --max-steps 7
+```
+
+**Usage via API:**
+You can integrate the Hybrid process into your Python application by importing and instantiating `HybridOrchestrator` or `HybridProcess`:
+```python
+from src.hybrid.orchestrator import HybridOrchestrator
+from src.hybrid.dataclasses import HybridOrchestratorConfig
+from src.llm_config import LLMConfig
+
+# Configure LLM models
+main_llm_config = LLMConfig(
+    model="gpt-4o",
+    temperature=0.2,
+    max_tokens=1000
+)
+
+# Configure the Hybrid Orchestrator
+hybrid_config = HybridOrchestratorConfig(
+    main_llm_config=main_llm_config,
+    max_steps=5,
+    max_time=60,
+    # ... other configurations
+)
+
+# Instantiate and run the orchestrator
+orchestrator = HybridOrchestrator(config=hybrid_config)
+problem_statement = "Explain the concept of quantum entanglement in simple terms and provide a real-world analogy."
+result = orchestrator.execute(problem_statement)
+
+if result.final_answer:
+    print("Final Answer:", result.final_answer)
+else:
+    print("Hybrid process did not yield a final answer.")
 ```
 
 ### CLI Parameters
@@ -76,14 +141,15 @@ Here are the available command-line arguments:
 *   **`--problem` / `-p`**: (Mutually exclusive with `--problem-filename`) The problem or question to solve.
 *   **`--problem-filename`**: (Mutually exclusive with `--problem`) Path to a file containing the problem.
 *   **`--processing-mode`**: Reasoning strategy trigger mode.
-    *   Choices: `always-reasoning`, `assess-first`, `never-reasoning`, `aot_direct`, `l2t_direct`, `l2t`
+    *   Choices: `always-reasoning`, `assess-first`, `never-reasoning`, `aot_direct`, `l2t_direct`, `l2t`, `hybrid_direct`
     *   Default: `assess-first` (`ASSESS_FIRST`)
-    *   `always-reasoning`: Force an iterative reasoning process (e.g., AoT, L2T).
+    *   `always-reasoning`: Force an iterative reasoning process (e.g., AoT, L2T, Hybrid).
     *   `assess-first`: Use a small LLM to decide between one-shot or an advanced reasoning process.
     *   `never-reasoning`: Force one-shot processing (direct answer).
     *   `aot_direct`: Directly run the AoTProcess.
     *   `l2t_direct`: Directly run the L2TProcess.
     *   `l2t`: Use the L2TOrchestrator (which internally uses L2TProcess).
+    *   `hybrid_direct`: Directly run the HybridProcess.
 *   **`--main-models`**: Space-separated list of main LLM(s) for one-shot or advanced reasoning processes.
     *   Default: `tngtech/deepseek-r1t-chimera:free deepseek/deepseek-prover-v2:free`
 *   **`--main-temp`**: Temperature for main LLM(s).
