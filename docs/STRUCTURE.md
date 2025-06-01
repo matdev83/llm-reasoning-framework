@@ -31,6 +31,13 @@ This directory houses the main logic and components of the LLM Reasoning Framewo
 *   `response_parser.py`: A generic component for parsing and extracting information from LLM responses.
 *   `reasoning_process.py`: An abstract base class defining common interfaces for different reasoning processes (e.g., AoT, L2T, Hybrid).
 
+### `src/llm_config/` - LLM Configuration
+
+Modules for managing LLM configurations, including model selection, API keys, and rate limits.
+
+*   `__init__.py`: Initializes the `llm_config` package.
+*   `llm_config.py`: Defines the structure and management of LLM configurations.
+
 ### `src/aot/` - Algorithm of Thoughts (AoT) Implementation
 
 Modules specifically designed for the Algorithm of Thoughts reasoning strategy.
@@ -101,9 +108,12 @@ This directory holds various configuration files and prompt templates.
     *   `l2t_initial.txt`: Initial prompt for the L2T process.
     *   `l2t_node_classification.txt`: Prompt for classifying nodes in the L2T graph.
     *   `l2t_thought_generation.txt`: Prompt for generating new thoughts/nodes in the L2T graph.
-*   `conf/example_user_prompts/`: Provides example problem statements for testing and demonstration.
-    *   `problem1.txt`, `problem2.txt`.
 *   `conf/tests/`: Contains configuration and prompts specifically used for testing purposes, particularly for heuristic evaluation.
+    *   `prompts/example_user_prompts/`: Provides example problem statements for testing and demonstration.
+        *   `problem1.txt`, `problem2.txt`.
+    *   `prompts/hard_reasoning_problems/`: Contains prompts for hard reasoning problems, along with their solutions, used for testing and demonstration.
+        *   `problem_1.txt` through `problem_10.txt`
+        *   `problem_1_solution.txt` through `problem_10_solution.txt`
     *   `prompts/heuristic/`: Contains test prompts for heuristic evaluation, categorized by complexity.
         *   `complex/`: Prompts expected to trigger complex reasoning.
             *   `prompt_01.txt` through `prompt_20.txt`
@@ -139,4 +149,5 @@ This directory contains the project's test suite, organized to mirror the `src/`
     *   `test_successful_path_with_final_answer.py`: Tests a successful reasoning path culminating in a final answer.
 *   `test_heuristic_detector.py`: Tests for the local heuristic analysis.
 *   `test_llm_accounting.py`: Tests for the integration with the `llm-accounting` library.
+*   `test_llm_config.py`: Tests for the LLM configuration management.
 *   `test_l2t_result_mutability.py`: Tests the mutability of L2T results.

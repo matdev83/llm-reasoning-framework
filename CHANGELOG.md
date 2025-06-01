@@ -3,6 +3,11 @@
 This document provides a chronological overview of the key development milestones, tasks, and significant refactors in this project.
 
 ## Commit History
+### <COMMIT_HASH> - 2025-06-01 - Docs: Update STRUCTURE.md to reflect latest project changes
+**Changes:**
+- Modified ocs/STRUCTURE.md
+
+
 ### 2d6b2cf - 2025-06-01 - Refactor: Restructure prompt files and update dependencies. Moved prompt files to conf/tests/prompts/ and added requests and pytest to pyproject.toml.
 **Changes:**
 - Modified gitignore
