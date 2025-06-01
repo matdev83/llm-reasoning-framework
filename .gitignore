@@ -51,3 +51,5 @@ coverage.xml
 src/.bak/
 data/accounting.sqlite
 data/audit_log.sqlite
+.aider.conf.yml
+.aider*

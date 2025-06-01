@@ -3,6 +3,47 @@
 This document provides a chronological overview of the key development milestones, tasks, and significant refactors in this project.
 
 ## Commit History
+### <COMMIT_HASH> - 2025-06-01 - Refactor: Restructure prompt files and update dependencies. Moved prompt files to conf/tests/prompts/ and added requests and pytest to pyproject.toml.
+**Changes:**
+- Modified gitignore
+- Modified onf/example_user_prompts/problem1.txt
+- Modified onf/example_user_prompts/problem2.txt
+- Modified onf/problem_1.txt
+- Modified onf/problem_10.txt
+- Modified onf/problem_2.txt
+- Modified onf/problem_3.txt
+- Modified onf/problem_4.txt
+- Modified onf/problem_5.txt
+- Modified onf/problem_6.txt
+- Modified onf/problem_7.txt
+- Modified onf/problem_8.txt
+- Modified onf/problem_9.txt
+- Modified ard_reasoning_problems/problem_1.txt
+- Modified ard_reasoning_problems/problem_10.txt
+- Modified ard_reasoning_problems/problem_10_solution.txt
+- Modified ard_reasoning_problems/problem_1_solution.txt
+- Modified ard_reasoning_problems/problem_2.txt
+- Modified ard_reasoning_problems/problem_2_solution.txt
+- Modified ard_reasoning_problems/problem_3.txt
+- Modified ard_reasoning_problems/problem_3_solution.txt
+- Modified ard_reasoning_problems/problem_4.txt
+- Modified ard_reasoning_problems/problem_4_solution.txt
+- Modified ard_reasoning_problems/problem_5.txt
+- Modified ard_reasoning_problems/problem_5_solution.txt
+- Modified ard_reasoning_problems/problem_6.txt
+- Modified ard_reasoning_problems/problem_6_solution.txt
+- Modified ard_reasoning_problems/problem_7.txt
+- Modified ard_reasoning_problems/problem_7_solution.txt
+- Modified ard_reasoning_problems/problem_8.txt
+- Modified ard_reasoning_problems/problem_8_solution.txt
+- Modified ard_reasoning_problems/problem_9.txt
+- Modified ard_reasoning_problems/problem_9_solution.txt
+- Modified yproject.toml
+- Modified equirements.txt
+- Modified onf/tests/prompts/example_user_prompts/
+- Modified onf/tests/prompts/hard_reasoning_problems/
+
+
 ### b06d6a2 - 2025-05-31 - Refactor: Integrate llm-accounting directly and remove dummy classes
 **Changes:**
 - Modified src/llm_client.py

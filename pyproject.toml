@@ -21,6 +21,8 @@ classifiers = [
 dependencies = [
     "openai",
     "llm-accounting",
+    "requests",
+    "pytest",
 ]
 
 [project.urls]
