@@ -268,7 +268,7 @@ class TestOutputCapture(unittest.TestCase):
         mock_l2t_config.initial_prompt_model_names = ["test_initial_model"]
         mock_l2t_config.classification_model_names = ["test_classification_model"]
         mock_l2t_config.thought_generation_model_names = ["test_thought_model"]
-        mock_l2t_config.max_steps = 1
+        mock_l2t_config.max_steps = 2
         mock_l2t_config.max_total_nodes = 10
         mock_l2t_config.max_time_seconds = 30
         mock_l2t_config.x_fmt_default = "fmt_default"
