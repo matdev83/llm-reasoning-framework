@@ -6,12 +6,13 @@ from typing import List, Tuple, Optional, Any # Import Optional and Any
 from src.reasoning_process import ReasoningProcess # Import the base class
 from .enums import AotTriggerMode, AssessmentDecision
 from .dataclasses import LLMCallStats, AoTRunnerConfig, Solution
-from src.llm_client import LLMClient # Moved here
-from src.llm_config import LLMConfig # Added
+from src.llm_client import LLMClient
+from src.llm_config import LLMConfig
 from src.complexity_assessor import ComplexityAssessor
 from .processor import AoTProcessor
 from src.heuristic_detector import HeuristicDetector
 
+logger = logging.getLogger(__name__) # Named logger
 
 # Definition of AoTProcess class starts here
 class AoTProcess(ReasoningProcess):
@@ -21,12 +22,12 @@ class AoTProcess(ReasoningProcess):
     running the AoTProcessor and handling fallbacks to a direct one-shot call if AoT fails.
     """
     def __init__(self,
-                 llm_client: LLMClient, # Passed in
+                 llm_client: LLMClient,
                  aot_config: AoTRunnerConfig,
-                 aot_main_llm_config: LLMConfig, # For AoTProcessor
-                 direct_oneshot_llm_config: LLMConfig): # For fallback
+                 aot_main_llm_config: LLMConfig,
+                 direct_oneshot_llm_config: LLMConfig):
 
-        self.llm_client = llm_client # Use passed-in client
+        self.llm_client = llm_client
         self.aot_config = aot_config
         self.aot_main_llm_config = aot_main_llm_config
         self.direct_oneshot_llm_config = direct_oneshot_llm_config
@@ -37,27 +38,25 @@ class AoTProcess(ReasoningProcess):
         self._process_summary: Optional[str] = None
 
     def _run_direct_oneshot(self, problem_text: str, is_fallback:bool = False) -> Tuple[str, LLMCallStats]:
-        # This method is for AoTProcess's internal use (e.g., fallback)
         mode = "FALLBACK ONESHOT (AoTProcess)" if is_fallback else "ONESHOT (AoTProcess)"
-        logging.info(f"--- Proceeding with {mode} Answer ---")
-        logging.info(f"Using models: {', '.join(self.aot_config.main_model_names)}, LLMConfig: {self.direct_oneshot_llm_config}")
+        logger.info(f"--- Proceeding with {mode} Answer ---") # Use logger
+        logger.info(f"Using models: {', '.join(self.aot_config.main_model_names)}, LLMConfig: {self.direct_oneshot_llm_config}") # Use logger
 
         response_content, stats = self.llm_client.call(
             prompt=problem_text, models=self.aot_config.main_model_names, config=self.direct_oneshot_llm_config
         )
-        logging.debug(f"Direct {mode} response from {stats.model_name}:\n{response_content}")
-        logging.info(f"LLM call ({stats.model_name}) for {mode}: Duration: {stats.call_duration_seconds:.2f}s, Tokens (C:{stats.completion_tokens}, P:{stats.prompt_tokens})")
+        logger.debug(f"Direct {mode} response from {stats.model_name}:\n{response_content}") # Use logger
+        logger.info(f"LLM call ({stats.model_name}) for {mode}: Duration: {stats.call_duration_seconds:.2f}s, Tokens (C:{stats.completion_tokens}, P:{stats.prompt_tokens})") # Use logger
         return response_content, stats
 
     def execute(self, problem_description: str, model_name: str, *args, **kwargs) -> None:
         overall_start_time = time.monotonic()
         self._solution = Solution()
-        logging.info(f"AoTProcess executing for problem: {problem_description[:100]}... (model_name param: {model_name})")
+        logger.info(f"AoTProcess executing for problem: {problem_description[:100]}... (model_name param: {model_name})") # Use logger
 
         if not self.aot_processor:
-            logging.critical("AoTProcessor not initialized within AoTProcess.")
+            logger.critical("AoTProcessor not initialized within AoTProcess.") # Use logger
             self._solution.final_answer = "Error: AoTProcessor not initialized in AoTProcess."
-            # Ensure solution object tracks stats even for this failure path
             if self._solution.total_wall_clock_time_seconds is None:
                  self._solution.total_wall_clock_time_seconds = time.monotonic() - overall_start_time
             self._process_summary = self._generate_process_summary(self._solution)
@@ -65,13 +64,13 @@ class AoTProcess(ReasoningProcess):
 
         aot_result_data, aot_processor_summary_str = self.aot_processor.run(problem_description)
         self._solution.aot_result = aot_result_data
-        self._solution.aot_summary_output = aot_processor_summary_str # Summary from AoTProcessor's run
+        self._solution.aot_summary_output = aot_processor_summary_str
 
         if aot_result_data.succeeded:
             self._solution.final_answer = aot_result_data.final_answer
             self._solution.reasoning_trace = aot_result_data.reasoning_trace
         else:
-            logging.warning(f"AoT process failed (Reason: {aot_result_data.final_answer}). Falling back to one-shot.")
+            logger.warning(f"AoT process failed (Reason: {aot_result_data.final_answer}). Falling back to one-shot.") # Use logger
             self._solution.aot_failed_and_fell_back = True
             fallback_answer, fallback_stats = self._run_direct_oneshot(problem_description, is_fallback=True)
             self._solution.final_answer = fallback_answer
@@ -82,7 +81,7 @@ class AoTProcess(ReasoningProcess):
             self._solution.total_wall_clock_time_seconds = time.monotonic() - overall_start_time
         self._process_summary = self._generate_process_summary(self._solution)
 
-    def get_result(self) -> Tuple[Optional[Solution], Optional[str]]: # Matches ReasoningProcess Any, but more specific
+    def get_result(self) -> Tuple[Optional[Solution], Optional[str]]:
         return self._solution, self._process_summary
 
     def _generate_process_summary(self, solution: Solution) -> str:
@@ -121,38 +120,43 @@ class AoTProcess(ReasoningProcess):
             output_buffer.write("\nFinal answer not successfully extracted by AoTProcess.\n")
         output_buffer.write("="*60 + "\n")
         return output_buffer.getvalue()
-# End of AoTProcess class definition
 
-class InteractiveAoTOrchestrator: # Renamed from AoTOrchestrator for clarity
+class InteractiveAoTOrchestrator:
     def __init__(self,
-                 llm_client: LLMClient, # Passed in
+                 llm_client: LLMClient,
                  trigger_mode: AotTriggerMode,
                  aot_config: AoTRunnerConfig,
-                 direct_oneshot_llm_config: LLMConfig, # Passed LLMConfig
-                 assessment_llm_config: LLMConfig, # Passed LLMConfig
-                 aot_main_llm_config: LLMConfig, # Passed LLMConfig for AoTProcessor
+                 direct_oneshot_llm_config: LLMConfig,
+                 assessment_llm_config: LLMConfig,
+                 aot_main_llm_config: LLMConfig,
                  direct_oneshot_model_names: List[str],
                  assessment_model_names: List[str],
                  use_heuristic_shortcut: bool = True,
                  heuristic_detector: Optional[HeuristicDetector] = None,
-                 enable_rate_limiting: bool = True, # Kept for consistency, but not used for LLMClient init here
-                 enable_audit_logging: bool = True): # Kept for consistency, but not used for LLMClient init here
+                 enable_rate_limiting: bool = True,
+                 enable_audit_logging: bool = True):
 
-        self.llm_client = llm_client # Use passed-in client
+        self.llm_client = llm_client
         self.trigger_mode = trigger_mode
         self.use_heuristic_shortcut = use_heuristic_shortcut
         self.direct_oneshot_llm_config = direct_oneshot_llm_config
         self.direct_oneshot_model_names = direct_oneshot_model_names
-        self.aot_main_llm_config = aot_main_llm_config # Store for AoTProcess
+        self.aot_main_llm_config = aot_main_llm_config
 
         self.heuristic_detector = heuristic_detector
+        # Storing assessment_llm_config and assessment_model_names
+        self.assessment_llm_config = assessment_llm_config
+        self.assessment_model_names = assessment_model_names
+        # Storing aot_config
+        self.aot_config = aot_config
+
 
         self.complexity_assessor = None
         if self.trigger_mode == AotTriggerMode.ASSESS_FIRST:
             self.complexity_assessor = ComplexityAssessor(
                 llm_client=self.llm_client,
-                small_model_names=assessment_model_names,
-                llm_config=assessment_llm_config, # Pass LLMConfig
+                small_model_names=assessment_model_names, # Corrected to use passed arg
+                llm_config=assessment_llm_config, # Corrected to use passed arg
                 use_heuristic_shortcut=self.use_heuristic_shortcut,
                 heuristic_detector=self.heuristic_detector
             )
@@ -160,22 +164,22 @@ class InteractiveAoTOrchestrator: # Renamed from AoTOrchestrator for clarity
         self.aot_process_instance: Optional[AoTProcess] = None
         if self.trigger_mode == AotTriggerMode.ALWAYS_AOT or self.trigger_mode == AotTriggerMode.ASSESS_FIRST:
             self.aot_process_instance = AoTProcess(
-                llm_client=self.llm_client, # Pass shared client
-                aot_config=aot_config,
-                aot_main_llm_config=self.aot_main_llm_config, # Pass LLMConfig
-                direct_oneshot_llm_config=self.direct_oneshot_llm_config # Pass LLMConfig
+                llm_client=self.llm_client,
+                aot_config=self.aot_config, # Use stored aot_config
+                aot_main_llm_config=self.aot_main_llm_config,
+                direct_oneshot_llm_config=self.direct_oneshot_llm_config
             )
 
     def _run_direct_oneshot(self, problem_text: str, is_fallback:bool = False) -> Tuple[str, LLMCallStats]:
         mode = "FALLBACK ONESHOT (Orchestrator)" if is_fallback else "ONESHOT (Orchestrator)"
-        logging.info(f"--- Proceeding with {mode} Answer ---")
-        logging.info(f"Using models: {', '.join(self.direct_oneshot_model_names)}, LLMConfig: {self.direct_oneshot_llm_config}")
+        logger.info(f"--- Proceeding with {mode} Answer ---") # Use logger
+        logger.info(f"Using models: {', '.join(self.direct_oneshot_model_names)}, LLMConfig: {self.direct_oneshot_llm_config}") # Use logger
 
         response_content, stats = self.llm_client.call(
             prompt=problem_text, models=self.direct_oneshot_model_names, config=self.direct_oneshot_llm_config
         )
-        logging.debug(f"Direct {mode} response from {stats.model_name}:\n{response_content}")
-        logging.info(f"LLM call ({stats.model_name}) for {mode}: Duration: {stats.call_duration_seconds:.2f}s, Tokens (C:{stats.completion_tokens}, P:{stats.prompt_tokens})")
+        logger.debug(f"Direct {mode} response from {stats.model_name}:\n{response_content}") # Use logger
+        logger.info(f"LLM call ({stats.model_name}) for {mode}: Duration: {stats.call_duration_seconds:.2f}s, Tokens (C:{stats.completion_tokens}, P:{stats.prompt_tokens})") # Use logger
         return response_content, stats
 
     def solve(self, problem_text: str, model_name_for_aot: str = "default_aot_model") -> Tuple[Solution, str]:
@@ -184,15 +188,15 @@ class InteractiveAoTOrchestrator: # Renamed from AoTOrchestrator for clarity
         aot_process_execution_summary: Optional[str] = None
 
         if self.trigger_mode == AotTriggerMode.NEVER_AOT:
-            logging.info("Trigger mode: NEVER_AOT. Orchestrator performing direct one-shot call.")
+            logger.info("Trigger mode: NEVER_AOT. Orchestrator performing direct one-shot call.") # Use logger
             final_answer, oneshot_stats = self._run_direct_oneshot(problem_text)
             orchestrator_solution.final_answer = final_answer
             orchestrator_solution.main_call_stats = oneshot_stats
 
         elif self.trigger_mode == AotTriggerMode.ALWAYS_AOT:
-            logging.info("Trigger mode: ALWAYS_AOT. Orchestrator delegating to AoTProcess.")
+            logger.info("Trigger mode: ALWAYS_AOT. Orchestrator delegating to AoTProcess.") # Use logger
             if not self.aot_process_instance:
-                logging.critical("AoTProcess not initialized for ALWAYS_AOT mode.")
+                logger.critical("AoTProcess not initialized for ALWAYS_AOT mode.") # Use logger
                 orchestrator_solution.final_answer = "Error: AoTProcess not initialized for ALWAYS_AOT mode."
             else:
                 self.aot_process_instance.execute(problem_description=problem_text, model_name=model_name_for_aot)
@@ -208,13 +212,13 @@ class InteractiveAoTOrchestrator: # Renamed from AoTOrchestrator for clarity
                         orchestrator_solution.fallback_call_stats = aot_solution_obj.fallback_call_stats
                 else:
                     orchestrator_solution.final_answer = "Error: AoTProcess executed but returned no solution object."
-                    logging.error("AoTProcess returned None for solution object in ALWAYS_AOT mode.")
+                    logger.error("AoTProcess returned None for solution object in ALWAYS_AOT mode.") # Use logger
 
 
         elif self.trigger_mode == AotTriggerMode.ASSESS_FIRST:
-            logging.info("Trigger mode: ASSESS_FIRST. Orchestrator performing complexity assessment.")
+            logger.info("Trigger mode: ASSESS_FIRST. Orchestrator performing complexity assessment.") # Use logger
             if not self.complexity_assessor:
-                logging.critical("ComplexityAssessor not initialized for ASSESS_FIRST mode.")
+                logger.critical("ComplexityAssessor not initialized for ASSESS_FIRST mode.") # Use logger
                 orchestrator_solution.final_answer = "Error: ComplexityAssessor not initialized."
             else:
                 assessment_decision, assessment_stats = self.complexity_assessor.assess(problem_text)
@@ -222,14 +226,14 @@ class InteractiveAoTOrchestrator: # Renamed from AoTOrchestrator for clarity
                 orchestrator_solution.assessment_decision = assessment_decision
 
                 if assessment_decision == AssessmentDecision.ONE_SHOT:
-                    logging.info("Assessment: ONE_SHOT. Orchestrator performing direct one-shot call.")
+                    logger.info("Assessment: ONE_SHOT. Orchestrator performing direct one-shot call.") # Use logger
                     final_answer, oneshot_stats = self._run_direct_oneshot(problem_text)
                     orchestrator_solution.final_answer = final_answer
                     orchestrator_solution.main_call_stats = oneshot_stats
                 elif assessment_decision == AssessmentDecision.ADVANCED_REASONING:
-                    logging.info("Assessment: ADVANCED_REASONING. Orchestrator delegating to AoTProcess.")
+                    logger.info("Assessment: ADVANCED_REASONING. Orchestrator delegating to AoTProcess.") # Use logger
                     if not self.aot_process_instance:
-                        logging.critical("AoTProcess not initialized for ASSESS_FIRST mode (ADVANCED_REASONING path).")
+                        logger.critical("AoTProcess not initialized for ASSESS_FIRST mode (ADVANCED_REASONING path).") # Use logger
                         orchestrator_solution.final_answer = "Error: AoTProcess not initialized for ADVANCED_REASONING path."
                     else:
                         self.aot_process_instance.execute(problem_description=problem_text, model_name=model_name_for_aot)
@@ -245,9 +249,9 @@ class InteractiveAoTOrchestrator: # Renamed from AoTOrchestrator for clarity
                                 orchestrator_solution.fallback_call_stats = aot_solution_obj.fallback_call_stats
                         else:
                              orchestrator_solution.final_answer = "Error: AoTProcess (post-assessment) returned no solution object."
-                             logging.error("AoTProcess returned None for solution object in ASSESS_FIRST (ADVANCED_REASONING path) mode.")
-                else:
-                    logging.error("Complexity assessment failed. Orchestrator attempting one-shot call as a last resort.")
+                             logger.error("AoTProcess returned None for solution object in ASSESS_FIRST (ADVANCED_REASONING path) mode.") # Use logger
+                else: # AssessmentDecision.ERROR or other unexpected
+                    logger.error(f"Complexity assessment resulted in unexpected decision: {assessment_decision}. Orchestrator attempting one-shot call as a last resort.") # Use logger
                     
                     fallback_answer, fallback_stats = self._run_direct_oneshot(problem_text, is_fallback=True)
                     orchestrator_solution.final_answer = fallback_answer
@@ -284,7 +288,7 @@ class InteractiveAoTOrchestrator: # Renamed from AoTOrchestrator for clarity
             elif solution.aot_failed_and_fell_back:
                  output_buffer.write(f"AoTProcess Reported Failure and Fallback: Yes (Reason: {solution.aot_result.final_answer if solution.aot_result else 'N/A'})\n")
         
-        elif solution.fallback_call_stats and not aot_process_specific_summary:
+        elif solution.fallback_call_stats and not aot_process_specific_summary: # Orchestrator's own fallback
             sfb = solution.fallback_call_stats
             output_buffer.write(f"Orchestrator Fallback One-Shot Call (e.g. due to Assessment Error) ({sfb.model_name}): C={sfb.completion_tokens}, P={sfb.prompt_tokens}, Time={sfb.call_duration_seconds:.2f}s\n")
 

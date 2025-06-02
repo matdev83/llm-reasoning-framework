@@ -13,11 +13,11 @@ from .dataclasses import L2TConfig, L2TResult, L2TSolution, L2TModelConfigs # Ad
 from .enums import L2TTriggerMode
 from .processor import L2TProcessor
 from src.heuristic_detector import HeuristicDetector 
-from src.l2t_orchestrator_utils.summary_generator import L2TSummaryGenerator
+from src.l2t_orchestrator_utils.summary_generator import L2TSummaryGenerator # Moved back to module level
 from src.l2t_orchestrator_utils.oneshot_executor import OneShotExecutor
 
-if not logging.getLogger().hasHandlers():
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# Removed: if not logging.getLogger().hasHandlers():
+# Removed:     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class L2TProcess(ReasoningProcess):
@@ -99,6 +99,7 @@ class L2TOrchestrator:
                  heuristic_detector: Optional[HeuristicDetector] = None,
                  enable_rate_limiting: bool = True,
                  enable_audit_logging: bool = True):
+        # from src.l2t_orchestrator_utils.summary_generator import L2TSummaryGenerator # No longer here
 
         self.trigger_mode = trigger_mode
         self.use_heuristic_shortcut = use_heuristic_shortcut
