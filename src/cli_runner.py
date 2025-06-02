@@ -9,19 +9,19 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from src.llm_client import LLMClient
 from src.llm_config import LLMConfig
-from src.prompt_generator import PromptGenerator
+# from src.prompt_generator import PromptGenerator # No longer directly used in CLI runner
 
 from src.aot.enums import AotTriggerMode
 from src.aot.dataclasses import AoTRunnerConfig, Solution as AoTSolution
 from src.aot.orchestrator import InteractiveAoTOrchestrator
 from src.aot.processor import AoTProcessor
 from src.aot.constants import (
-    DEFAULT_MAIN_MODEL_NAMES as DEFAULT_AOT_MAIN_MODEL_NAMES, 
-    DEFAULT_SMALL_MODEL_NAMES as DEFAULT_AOT_ASSESSMENT_MODEL_NAMES, 
-    DEFAULT_MAX_STEPS as DEFAULT_AOT_MAX_STEPS, 
-    DEFAULT_MAX_TIME_SECONDS as DEFAULT_AOT_MAX_TIME_SECONDS, 
-    DEFAULT_NO_PROGRESS_LIMIT as DEFAULT_AOT_NO_PROGRESS_LIMIT, 
-    DEFAULT_MAIN_TEMPERATURE as DEFAULT_AOT_MAIN_TEMPERATURE, 
+    DEFAULT_MAIN_MODEL_NAMES as DEFAULT_AOT_MAIN_MODEL_NAMES,
+    DEFAULT_SMALL_MODEL_NAMES as DEFAULT_AOT_ASSESSMENT_MODEL_NAMES,
+    DEFAULT_MAX_STEPS as DEFAULT_AOT_MAX_STEPS,
+    DEFAULT_MAX_TIME_SECONDS as DEFAULT_AOT_MAX_TIME_SECONDS,
+    DEFAULT_NO_PROGRESS_LIMIT as DEFAULT_AOT_NO_PROGRESS_LIMIT,
+    DEFAULT_MAIN_TEMPERATURE as DEFAULT_AOT_MAIN_TEMPERATURE,
     DEFAULT_ASSESSMENT_TEMPERATURE as DEFAULT_AOT_ASSESSMENT_TEMPERATURE
 )
 
@@ -65,11 +65,19 @@ from src.hybrid.constants import (
     DEFAULT_HYBRID_ONESHOT_TEMPERATURE,
 )
 
+# GoT Imports
+from src.got.enums import GoTTriggerMode
+from src.got.dataclasses import GoTConfig, GoTModelConfigs, GoTSolution
+from src.got.orchestrator import GoTOrchestrator, GoTProcess
+from src.got.processor import GoTProcessor
+from src.got.summary_generator import GoTSummaryGenerator
+
 
 # Helper to define new direct processing modes
 DIRECT_AOT_MODE = "aot-direct"
 DIRECT_L2T_MODE = "l2t-direct"
 DIRECT_HYBRID_MODE = "hybrid-direct"
+DIRECT_GOT_MODE = "got-direct"
 
 def main():
     parser = argparse.ArgumentParser(
@@ -85,19 +93,21 @@ def main():
         "aot-always", "aot-assess-first", "aot-never",
         "l2t",
         "hybrid-always", "hybrid-assess-first", "hybrid-never",
-        DIRECT_AOT_MODE, DIRECT_L2T_MODE, DIRECT_HYBRID_MODE
+        "got-always", "got-assess-first", "got-never", # GoT Orchestrator modes
+        DIRECT_AOT_MODE, DIRECT_L2T_MODE, DIRECT_HYBRID_MODE, DIRECT_GOT_MODE # Direct Process modes
     ])))
 
     parser.add_argument(
         "--processing-mode", "--mode", dest="processing_mode", type=str,
         choices=all_modes,
-        default="aot-assess-first", # Default to the new explicit name
+        default="aot-assess-first",
         help=(f"Processing mode (default: aot-assess-first).\n"
               f"Available modes: {', '.join(all_modes)}\n"
               f"  AoT Orchestrator Modes: 'aot-always', 'aot-assess-first', 'aot-never'\n"
               f"  L2T Orchestrator Mode: 'l2t'\n"
               f"  Hybrid Orchestrator Modes: 'hybrid-always', 'hybrid-assess-first', 'hybrid-never'\n"
-              f"  Direct Process Modes: '{DIRECT_AOT_MODE}', '{DIRECT_L2T_MODE}', '{DIRECT_HYBRID_MODE}'")
+              f"  GoT Orchestrator Modes: 'got-always', 'got-assess-first', 'got-never'\n"
+              f"  Direct Process Modes: '{DIRECT_AOT_MODE}', '{DIRECT_L2T_MODE}', '{DIRECT_HYBRID_MODE}', '{DIRECT_GOT_MODE}'")
     )
 
     parser.add_argument("--enable-rate-limiting", action="store_true", help="Enable rate limiting for LLM calls.")
@@ -182,6 +192,46 @@ def main():
     hybrid_group.add_argument("--hybrid-disable-heuristic", action="store_true",
                            help="Disable the local heuristic analysis for Hybrid complexity assessment, always using the LLM for assessment.")
 
+    # GoT Configuration Group
+    got_group = parser.add_argument_group('GoT Process Configuration')
+    got_group.add_argument("--got-thought-gen-models", nargs='+', default=["openai/gpt-4o-mini"],
+                           help="LLM(s) for GoT thought generation. Default: openai/gpt-4o-mini")
+    got_group.add_argument("--got-scoring-models", nargs='+', default=["openai/gpt-3.5-turbo"],
+                           help="LLM(s) for GoT thought scoring. Default: openai/gpt-3.5-turbo")
+    got_group.add_argument("--got-aggregation-models", nargs='+', default=["openai/gpt-4o-mini"],
+                           help="LLM(s) for GoT thought aggregation. Default: openai/gpt-4o-mini")
+    got_group.add_argument("--got-refinement-models", nargs='+', default=["openai/gpt-4o-mini"],
+                           help="LLM(s) for GoT thought refinement. Default: openai/gpt-4o-mini")
+
+    got_group.add_argument("--got-max-thoughts", type=int, default=50, help="GoT: Max total thoughts in the graph. Default: 50")
+    got_group.add_argument("--got-max-iterations", type=int, default=10, help="GoT: Max iterations of generation/transformation. Default: 10")
+    got_group.add_argument("--got-min-score-for-expansion", type=float, default=0.5, help="GoT: Minimum score to consider a thought for expansion. Default: 0.5")
+    got_group.add_argument("--got-pruning-threshold-score", type=float, default=0.2, help="GoT thoughts below this score might be pruned. Set to 0 or negative to effectively disable. Default: 0.2")
+    got_group.add_argument("--got-max-children-per-thought", type=int, default=3, help="GoT: Max new thoughts to generate from one parent. Default: 3")
+    got_group.add_argument("--got-max-parents-for-aggregation", type=int, default=5, help="GoT: Max parents to consider for aggregation. Default: 5")
+    got_group.add_argument("--got-solution-found-score-threshold", type=float, default=0.9, help="GoT: If a thought reaches this score, it might be a solution. Default: 0.9")
+    got_group.add_argument("--got-max-time-seconds", type=int, default=300, help="GoT: Max time for the GoT process. Default: 300s")
+
+    got_group.add_argument("--got-disable-aggregation", action="store_false", dest="got_enable_aggregation", help="GoT: Disable aggregation step.")
+    got_group.add_argument("--got-disable-refinement", action="store_false", dest="got_enable_refinement", help="GoT: Disable refinement step.")
+    got_group.add_argument("--got-disable-pruning", action="store_false", dest="got_enable_pruning", help="GoT: Disable pruning step.")
+    parser.set_defaults(got_enable_aggregation=True, got_enable_refinement=True, got_enable_pruning=True)
+
+    got_group.add_argument("--got-thought-gen-temp", type=float, default=0.7, help="GoT: Temperature for thought generation. Default: 0.7")
+    got_group.add_argument("--got-scoring-temp", type=float, default=0.2, help="GoT: Temperature for scoring. Default: 0.2")
+    got_group.add_argument("--got-aggregation-temp", type=float, default=0.7, help="GoT: Temperature for aggregation. Default: 0.7")
+    got_group.add_argument("--got-refinement-temp", type=float, default=0.7, help="GoT: Temperature for refinement. Default: 0.7")
+    got_group.add_argument("--got-orchestrator-oneshot-temp", type=float, default=0.7, help="GoT: Temperature for orchestrator's one-shot/fallback. Default: 0.7")
+
+    got_group.add_argument("--got-assess-models", type=str, nargs='+', default=DEFAULT_AOT_ASSESSMENT_MODEL_NAMES,
+                           help=f"Assessment LLM(s) for GoT (if assess_first). Default: {' '.join(DEFAULT_AOT_ASSESSMENT_MODEL_NAMES)}")
+    got_group.add_argument("--got-assess-temp", type=float, default=DEFAULT_AOT_ASSESSMENT_TEMPERATURE,
+                           help=f"Temperature for GoT assessment LLM(s). Default: {DEFAULT_AOT_ASSESSMENT_TEMPERATURE}")
+    got_group.add_argument("--got-orchestrator-oneshot-models", type=str, nargs='+', default=DEFAULT_AOT_MAIN_MODEL_NAMES,
+                           help=f"Fallback one-shot LLM(s) for GoT Orchestrator. Default: {' '.join(DEFAULT_AOT_MAIN_MODEL_NAMES)}")
+    got_group.add_argument("--got-disable-heuristic", action="store_true", help="Disable local heuristic for GoT complexity assessment.")
+
+
     args = parser.parse_args()
 
     log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -214,25 +264,27 @@ def main():
             sys.exit(1)
 
     current_processing_mode = args.processing_mode
-    solution: Optional[Union[AoTSolution, L2TSolution, HybridSolution]] = None
+    solution: Optional[Union[AoTSolution, L2TSolution, HybridSolution, GoTSolution]] = None
     overall_summary_str = ""
 
     heuristic_detector_instance: Optional[HeuristicDetector] = None
     needs_heuristic_detector = False
     if (current_processing_mode == "aot-assess-first" and not args.aot_disable_heuristic) or \
        (current_processing_mode == "hybrid-assess-first" and not args.hybrid_disable_heuristic) or \
-       (current_processing_mode == "l2t"):
+       (current_processing_mode == "got-assess-first" and not args.got_disable_heuristic) or \
+       (current_processing_mode == "l2t"): # L2T uses it internally by default
         needs_heuristic_detector = True
 
     if needs_heuristic_detector:
         heuristic_detector_instance = HeuristicDetector()
 
+    # --- Instantiate Base Configs ---
     aot_pass_remaining_steps_float: Optional[float] = None
     if args.aot_pass_remaining_steps_pct is not None:
         aot_pass_remaining_steps_float = args.aot_pass_remaining_steps_pct / 100.0
     
     aot_runner_config = AoTRunnerConfig(
-        main_model_names=args.aot_main_models,
+        main_model_names=args.aot_main_models, # Note: AoT direct process uses this from runner_config
         max_steps=args.aot_max_steps,
         max_reasoning_tokens=args.aot_max_reasoning_tokens,
         max_time_seconds=args.aot_max_time,
@@ -272,6 +324,34 @@ def main():
         max_response_tokens=args.hybrid_max_response_tokens
     )
 
+    got_base_config = GoTConfig(
+        thought_generation_model_names=args.got_thought_gen_models,
+        scoring_model_names=args.got_scoring_models,
+        aggregation_model_names=args.got_aggregation_models,
+        refinement_model_names=args.got_refinement_models,
+        max_thoughts=args.got_max_thoughts,
+        max_iterations=args.got_max_iterations,
+        min_score_for_expansion=args.got_min_score_for_expansion,
+        pruning_threshold_score=args.got_pruning_threshold_score,
+        max_children_per_thought=args.got_max_children_per_thought,
+        max_parents_for_aggregation=args.got_max_parents_for_aggregation,
+        enable_aggregation=args.got_enable_aggregation,
+        enable_refinement=args.got_enable_refinement,
+        enable_pruning=args.got_enable_pruning,
+        solution_found_score_threshold=args.got_solution_found_score_threshold,
+        max_time_seconds=args.got_max_time_seconds
+    )
+    got_llm_configs = GoTModelConfigs(
+        thought_generation_config=LLMConfig(temperature=args.got_thought_gen_temp),
+        scoring_config=LLMConfig(temperature=args.got_scoring_temp),
+        aggregation_config=LLMConfig(temperature=args.got_aggregation_temp),
+        refinement_config=LLMConfig(temperature=args.got_refinement_temp),
+        orchestrator_oneshot_config=LLMConfig(temperature=args.got_orchestrator_oneshot_temp) # Used by GoTProcess and Orchestrator
+    )
+    got_assessment_llm_config = LLMConfig(temperature=args.got_assess_temp)
+
+
+    # --- Main Processing Logic ---
     if current_processing_mode == DIRECT_AOT_MODE:
         logging.info("Direct AoTProcessor mode selected.")
         aot_processor_instance = AoTProcessor(
@@ -424,6 +504,68 @@ def main():
         if not (solution and solution.final_answer):
             logging.error("Interactive AoT Orchestrator process did not produce a final answer.")
             if aot_mode_enum_val != AotTriggerMode.NEVER_AOT: sys.exit(1)
+
+    elif current_processing_mode == DIRECT_GOT_MODE:
+        logging.info("Direct GoTProcessor mode selected.")
+        got_processor_instance = GoTProcessor(
+            llm_client=shared_llm_client,
+            config=got_base_config,
+            model_configs=got_llm_configs
+        )
+        got_result_data = got_processor_instance.run(problem_text)
+        # Wrap the result for consistency, though direct processor doesn't build full GoTSolution
+        solution = GoTSolution(
+            got_result=got_result_data,
+            final_answer=got_result_data.final_answer,
+            total_wall_clock_time_seconds=got_result_data.total_process_wall_clock_time_seconds
+        )
+        # For direct mode, summary is simpler, focusing on GoTResult
+        summary_gen = GoTSummaryGenerator(trigger_mode=GoTTriggerMode.ALWAYS_GOT) # Dummy mode for this specific summary
+        overall_summary_str = summary_gen._format_got_result_summary(got_result_data)
+
+        print("\nDirect GoTProcessor Execution Summary:")
+        print(overall_summary_str if overall_summary_str else "No summary returned.")
+
+        succeeded = solution and solution.final_answer and solution.got_result and solution.got_result.succeeded
+        if not succeeded:
+            error_detail = solution.got_result.error_message if solution and solution.got_result else "Unknown error"
+            logging.error(f"Direct GoTProcessor did not produce a final answer or failed. Error: {error_detail}")
+            sys.exit(1)
+
+    elif current_processing_mode.startswith("got-"):
+        try:
+            if current_processing_mode == "got-always":
+                got_mode_enum_val = GoTTriggerMode.ALWAYS_GOT
+            elif current_processing_mode == "got-assess-first":
+                got_mode_enum_val = GoTTriggerMode.ASSESS_FIRST_GOT
+            elif current_processing_mode == "got-never":
+                got_mode_enum_val = GoTTriggerMode.NEVER_GOT
+            else:
+                raise ValueError(f"Unknown GoT mode: {current_processing_mode}")
+        except ValueError as e:
+            logging.critical(f"Invalid GoT mode string '{current_processing_mode}' for GoT Orchestrator. Error: {e}. Exiting.")
+            sys.exit(1)
+
+        logging.info(f"GoTOrchestrator mode selected: {got_mode_enum_val.value}")
+        got_orchestrator = GoTOrchestrator(
+            llm_client=shared_llm_client,
+            trigger_mode=got_mode_enum_val,
+            got_config=got_base_config,
+            got_model_configs=got_llm_configs,
+            direct_oneshot_llm_config=got_llm_configs.orchestrator_oneshot_config, # Re-use for orchestrator's direct one-shot
+            direct_oneshot_model_names=args.got_orchestrator_oneshot_models,
+            assessment_llm_config=got_assessment_llm_config,
+            assessment_model_names=args.got_assess_models,
+            use_heuristic_shortcut=not args.got_disable_heuristic,
+            heuristic_detector=heuristic_detector_instance
+        )
+        solution, overall_summary_str = got_orchestrator.solve(problem_text)
+        print("\nGoT Orchestrator Summary:")
+        print(overall_summary_str)
+        if not (solution and solution.succeeded and solution.final_answer): # Check GoTSolution's succeeded property
+            logging.error("GoT Orchestrator process did not produce a final answer or did not succeed.")
+            if got_mode_enum_val != GoTTriggerMode.NEVER_GOT: # Don't exit for NEVER_GOT if it "fails" (as it might be expected for testing)
+                 sys.exit(1)
     else:
         # This path should ideally not be reached if argparse choices are comprehensive
         logging.critical(f"Unknown or unhandled processing mode: {current_processing_mode}. Exiting.")
