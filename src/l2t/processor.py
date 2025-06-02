@@ -16,7 +16,7 @@ from .dataclasses import (
 )
 from .prompt_generator import L2TPromptGenerator
 from .response_parser import L2TResponseParser
-from src.l2t_processor_utils.node_processor import NodeProcessor
+from src.l2t_processor_utils.node_processor import NodeProcessor # Moved to __init__
 
 logger = logging.getLogger(__name__)
 
