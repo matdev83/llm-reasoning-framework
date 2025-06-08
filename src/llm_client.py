@@ -90,10 +90,32 @@ class LLMClient:
                 current_call_stats.call_duration_seconds = time.monotonic() - call_start_time
                 
                 response_payload = None
+                content = None # Initialize content here
+
                 try:
                     response_payload = response.json()
+                    # If JSON parsing succeeds, extract content as before
+                    if "error" in response_payload:
+                        error_msg = response_payload['error'].get('message', str(response_payload['error']))
+                        logging.error(f"LLM API Error ({model_name}) in 2xx response: {error_msg}")
+                        content = f"Error: API returned an error - {error_msg}"
+                    elif not response_payload.get("choices") or not response_payload["choices"][0].get("message"):
+                        logging.error(f"Unexpected API response structure from {model_name}: {response_payload}")
+                        content = "Error: Unexpected API response structure"
+                    else:
+                        content = response_payload["choices"][0]["message"]["content"]
+                    
+                    usage = response_payload.get("usage", {})
                 except requests.exceptions.JSONDecodeError:
-                    logging.warning(f"Could not parse JSON response from {model_name}. Status: {response.status_code}, Body: {response.text}")
+                    # If JSON parsing fails, but status is OK, use raw text
+                    if response.status_code == 200:
+                        logging.warning(f"Could not parse JSON response from {model_name}. Status: {response.status_code}, Body: {response.text}. Returning raw text.")
+                        content = response.text # <--- CHANGE HERE: Use raw text
+                        usage = {} # No usage info if JSON parsing failed
+                    else:
+                        logging.warning(f"Could not parse JSON response from {model_name}. Status: {response.status_code}, Body: {response.text}. Treating as error.")
+                        content = f"Error: Could not parse response from {model_name} (Status: {response.status_code})"
+                        usage = {}
 
                 if 400 <= response.status_code < 600:
                     error_body_text = response.text
@@ -105,10 +127,13 @@ class LLMClient:
                     logging.warning(f"API call to {model_name} failed with HTTP status {response.status_code}: {error_body_text}. Trying next model if available.")
                     last_error_content_for_failover = f"Error: API call to {model_name} (HTTP {response.status_code}) - {error_body_text}"
                     
-                    if response_payload is not None:
+                    if response_payload is not None: # Use response_payload if available for usage
                         usage = response_payload.get("usage", {})
                         current_call_stats.completion_tokens = usage.get("completion_tokens", 0)
                         current_call_stats.prompt_tokens = usage.get("prompt_tokens", 0)
+                    else: # If no JSON payload, usage is unknown
+                        current_call_stats.completion_tokens = 0
+                        current_call_stats.prompt_tokens = 0
                     
                     self.accounting.track_usage( # Now always uses real accounting
                         model=model_name,
@@ -123,23 +148,7 @@ class LLMClient:
 
                 response.raise_for_status()
                 
-                data = response_payload
-
-                if data is not None:
-                    if "error" in data: 
-                        error_msg = data['error'].get('message', str(data['error']))
-                        logging.error(f"LLM API Error ({model_name}) in 2xx response: {error_msg}")
-                        content = f"Error: API returned an error - {error_msg}"
-                    elif not data.get("choices") or not data["choices"][0].get("message"):
-                        logging.error(f"Unexpected API response structure from {model_name}: {data}")
-                        content = "Error: Unexpected API response structure"
-                    else:
-                        content = data["choices"][0]["message"]["content"]
-                    
-                    usage = data.get("usage", {})
-                else:
-                    content = "Error: No valid response data received"
-                    usage = {}
+                # After content is determined, proceed with usage tracking and audit logging
                 current_call_stats.completion_tokens = usage.get("completion_tokens", 0)
                 current_call_stats.prompt_tokens = usage.get("prompt_tokens", 0)
 
@@ -159,14 +168,18 @@ class LLMClient:
                         model=model_name,
                         prompt_text=prompt
                     )
-                    response_data = cast(dict, data) 
-                    self.audit_logger.log_response(
-                        app_name="LLMClient",
-                        user_name="api_user",
-                        model=model_name,
-                        response_text=content,
-                        remote_completion_id=response_data.get("id")
-                    )
+                    # Only log response if it was a valid JSON payload, otherwise it's raw text
+                    if response_payload is not None:
+                        response_data = cast(dict, response_payload) 
+                        self.audit_logger.log_response(
+                            app_name="LLMClient",
+                            user_name="api_user",
+                            model=model_name,
+                            response_text=content,
+                            remote_completion_id=response_data.get("id")
+                        )
+                    else:
+                        logging.debug(f"Skipping audit log for raw text response from {model_name}.")
 
                 if content.startswith("Error:"): 
                     if model_name != models[-1]: 

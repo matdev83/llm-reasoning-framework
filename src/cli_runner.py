@@ -291,7 +291,7 @@ def main():
         no_progress_limit=args.aot_no_progress_limit,
         pass_remaining_steps_pct=aot_pass_remaining_steps_float
     )
-    aot_main_llm_config = LLMConfig(temperature=args.aot_main_temp)
+    aot_main_llm_config = LLMConfig(temperature=args.aot_main_temp, max_tokens=2048) # Added max_tokens
     aot_assessment_llm_config = LLMConfig(temperature=args.aot_assess_temp)
 
     l2t_config = L2TConfig(
