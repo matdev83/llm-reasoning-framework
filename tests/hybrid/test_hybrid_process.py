@@ -12,6 +12,7 @@ from src.hybrid.orchestrator import HybridProcess # HybridProcess is in orchestr
 from src.hybrid.processor import HybridProcessor
 from src.hybrid.dataclasses import HybridConfig, HybridResult, HybridSolution, LLMCallStats
 from src.llm_client import LLMClient # For mocking HybridProcess's own client
+from src.llm_config import LLMConfig
 
 # Suppress most logging output during tests
 logging.basicConfig(level=logging.CRITICAL)
@@ -117,11 +118,17 @@ class TestHybridProcess(unittest.TestCase):
         self.assertIn("Partial thoughts before failure.", solution.reasoning_trace[0]) # Check reasoning trace preserved
 
         self.mock_hybrid_processor_instance.run.assert_called_once_with(problem_desc)
-        self.mock_process_llm_client.call.assert_called_once_with(
-            prompt=problem_desc,
-            models=self.direct_oneshot_models,
-            temperature=self.direct_oneshot_temp
-        )
+        
+        # Check the new LLMConfig structure
+        calls = self.mock_process_llm_client.call.call_args_list
+        self.assertEqual(len(calls), 1)
+        call_args = calls[0]
+        self.assertEqual(call_args[1]['prompt'], problem_desc)
+        self.assertEqual(call_args[1]['models'], self.direct_oneshot_models)
+        config = call_args[1]['config']
+        self.assertIsInstance(config, LLMConfig)
+        self.assertEqual(config.temperature, self.direct_oneshot_temp)
+        
         self.assertIn("Hybrid FAILED and Fell Back to One-Shot: Yes", summary)
         self.assertIn(f"Fallback One-Shot Call ({mock_fallback_stats.model_name})", summary)
 

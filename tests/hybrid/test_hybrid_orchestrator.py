@@ -14,6 +14,7 @@ from src.llm_client import LLMClient
 from src.complexity_assessor import ComplexityAssessor # Corrected: AssessmentDecision is part of ComplexityAssessor module or imported there
 from src.aot.enums import AssessmentDecision # Actual import for AssessmentDecision
 from src.heuristic_detector import HeuristicDetector # Corrected: HeuristicDetector is imported from src.heuristic_detector
+from src.llm_config import LLMConfig
 
 # Suppress most logging output during tests
 logging.basicConfig(level=logging.CRITICAL)
@@ -32,7 +33,7 @@ class TestHybridOrchestrator(unittest.TestCase):
         self.direct_oneshot_temp = 0.6
 
         self.assessment_models = ["assess/dummy"]
-        self.assessment_temp = 0.1
+        self.assessment_temp = 0.3
 
         # Mock for HybridProcess instance that would be created by the orchestrator
         self.mock_hybrid_process_instance = MagicMock(spec=HybridProcess)
@@ -75,7 +76,7 @@ class TestHybridOrchestrator(unittest.TestCase):
         solution, summary_str = orchestrator.solve(self.problem_text)
 
         self.mock_hybrid_process_instance.execute.assert_called_once_with(
-            problem_description=self.problem_text, model_name=ANY # model_name is placeholder
+            problem_description=self.problem_text, model_name="default_hybrid_model"
         )
         self.assertEqual(solution.final_answer, "Always hybrid answer")
         self.assertIn(mock_summary, summary_str) # Orchestrator summary should include process summary
@@ -111,15 +112,19 @@ class TestHybridOrchestrator(unittest.TestCase):
         MockHybridProcess.assert_not_called()
         self.mock_hybrid_process_instance.execute.assert_not_called()
 
-        self.mock_orchestrator_llm_client.call.assert_called_once_with(
-            prompt=self.problem_text,
-            models=self.direct_oneshot_models,
-            temperature=self.direct_oneshot_temp
-        )
+        # Check the new LLMConfig structure
+        calls = self.mock_orchestrator_llm_client.call.call_args_list
+        self.assertEqual(len(calls), 1)
+        call_args = calls[0]
+        self.assertEqual(call_args[1]['prompt'], self.problem_text)
+        self.assertEqual(call_args[1]['models'], self.direct_oneshot_models)
+        config = call_args[1]['config']
+        self.assertIsInstance(config, LLMConfig)
+        self.assertEqual(config.temperature, self.direct_oneshot_temp)
+
         self.assertEqual(solution.final_answer, oneshot_answer)
         self.assertEqual(solution.main_call_stats, mock_oneshot_stats)
-        self.assertIn("Orchestrator Main Model Call (Direct ONESHOT path)", summary_str)
-
+        self.assertIsNone(solution.hybrid_result)
 
     @patch('src.hybrid.orchestrator.HybridProcess')
     @patch('src.hybrid.orchestrator.LLMClient')
@@ -152,7 +157,7 @@ class TestHybridOrchestrator(unittest.TestCase):
         solution, summary_str = orchestrator.solve(self.problem_text)
 
         self.mock_complexity_assessor_instance.assess.assert_called_once_with(self.problem_text)
-        self.mock_hybrid_process_instance.execute.assert_called_once_with(problem_description=self.problem_text, model_name=ANY)
+        self.mock_hybrid_process_instance.execute.assert_called_once_with(problem_description=self.problem_text, model_name="default_hybrid_model")
         self.mock_orchestrator_llm_client.call.assert_not_called()
 
         self.assertEqual(solution.final_answer, "Assessed then Hybrid answer")
@@ -196,14 +201,20 @@ class TestHybridOrchestrator(unittest.TestCase):
         self.mock_complexity_assessor_instance.assess.assert_called_once_with(self.problem_text)
         self.mock_hybrid_process_instance.execute.assert_not_called()
 
-        self.mock_orchestrator_llm_client.call.assert_called_once_with(
-            prompt=self.problem_text,
-            models=self.direct_oneshot_models,
-            temperature=self.direct_oneshot_temp
-        )
+        # Check the new LLMConfig structure
+        calls = self.mock_orchestrator_llm_client.call.call_args_list
+        self.assertEqual(len(calls), 1)
+        call_args = calls[0]
+        self.assertEqual(call_args[1]['prompt'], self.problem_text)
+        self.assertEqual(call_args[1]['models'], self.direct_oneshot_models)
+        config = call_args[1]['config']
+        self.assertIsInstance(config, LLMConfig)
+        self.assertEqual(config.temperature, self.direct_oneshot_temp)
+
         self.assertEqual(solution.final_answer, oneshot_answer)
         self.assertEqual(solution.main_call_stats, mock_oneshot_stats)
         self.assertEqual(solution.assessment_stats, mock_assessment_stats)
+        self.assertEqual(solution.assessment_decision, AssessmentDecision.ONE_SHOT)
         self.assertIn("Assessment Phase", summary_str)
         self.assertIn("Decision='ONE_SHOT'", summary_str)
         self.assertIn("Orchestrator Main Model Call (Direct ONESHOT path)", summary_str)
@@ -240,13 +251,20 @@ class TestHybridOrchestrator(unittest.TestCase):
         self.mock_complexity_assessor_instance.assess.assert_called_once_with(self.problem_text)
         self.mock_hybrid_process_instance.execute.assert_not_called()
 
-        self.mock_orchestrator_llm_client.call.assert_called_once_with(
-            prompt=self.problem_text, models=self.direct_oneshot_models, temperature=self.direct_oneshot_temp
-        )
+        # Check the new LLMConfig structure
+        calls = self.mock_orchestrator_llm_client.call.call_args_list
+        self.assertEqual(len(calls), 1)
+        call_args = calls[0]
+        self.assertEqual(call_args[1]['prompt'], self.problem_text)
+        self.assertEqual(call_args[1]['models'], self.direct_oneshot_models)
+        config = call_args[1]['config']
+        self.assertIsInstance(config, LLMConfig)
+        self.assertEqual(config.temperature, self.direct_oneshot_temp)
 
         self.assertEqual(solution.final_answer, fallback_oneshot_answer)
         self.assertEqual(solution.fallback_call_stats, mock_fallback_stats)
         self.assertEqual(solution.assessment_stats, mock_assessment_error_stats)
+        self.assertEqual(solution.assessment_decision, AssessmentDecision.ERROR)
         self.assertIn("Assessment Phase", summary_str)
         self.assertIn("Decision='ERROR'", summary_str) # Relies on HybridOrchestrator correctly formatting this
         self.assertIn("Orchestrator Fallback One-Shot Call", summary_str)

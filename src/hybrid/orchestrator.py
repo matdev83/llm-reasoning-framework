@@ -5,6 +5,7 @@ from typing import List, Tuple, Optional, Any
 
 from src.reasoning_process import ReasoningProcess
 from src.llm_client import LLMClient
+from src.llm_config import LLMConfig
 from src.hybrid.dataclasses import HybridConfig, HybridSolution, HybridResult, LLMCallStats
 from src.hybrid.processor import HybridProcessor
 
@@ -38,11 +39,16 @@ class HybridProcess(ReasoningProcess):
         logger.info(f"--- Proceeding with {mode} Answer ---")
         logger.info(f"Using models: {', '.join(self.direct_oneshot_model_names)}, Temperature: {self.direct_oneshot_temperature}")
 
-        # Assuming llm_client.call returns (content_str, stats_obj)
+        # Create LLMConfig for oneshot call
+        oneshot_config = LLMConfig(
+            temperature=self.direct_oneshot_temperature,
+            max_tokens=2048  # Default max tokens for oneshot
+        )
+        
         response_content, stats = self.llm_client.call(
             prompt=problem_text,
             models=self.direct_oneshot_model_names,
-            temperature=self.direct_oneshot_temperature
+            config=oneshot_config
         )
         logger.debug(f"Direct {mode} response from {stats.model_name}:\n{response_content}")
         logger.info(f"LLM call ({stats.model_name}) for {mode}: Duration: {stats.call_duration_seconds:.2f}s, Tokens (C:{stats.completion_tokens}, P:{stats.prompt_tokens})")
@@ -187,10 +193,11 @@ class HybridOrchestrator:
                 logger.warning("ASSESS_FIRST trigger mode for HybridOrchestrator requires assessment_model_names and assessment_temperature.")
                 # Fallback to ALWAYS_HYBRID or handle error, for now, it will fail if assessor is used without params
             else:
+                assessment_config = LLMConfig(temperature=assessment_temperature)
                 self.complexity_assessor = ComplexityAssessor(
                     llm_client=self.llm_client,
                     small_model_names=assessment_model_names,
-                    temperature=assessment_temperature,
+                    llm_config=assessment_config,
                     use_heuristic_shortcut=self.use_heuristic_shortcut,
                     heuristic_detector=self.heuristic_detector
                 )
@@ -212,8 +219,16 @@ class HybridOrchestrator:
         logger.info(f"--- Proceeding with {mode} Answer ---")
         logger.info(f"Using models: {', '.join(self.direct_oneshot_model_names)}, Temperature: {self.direct_oneshot_temperature}")
 
+        # Create LLMConfig for oneshot call
+        oneshot_config = LLMConfig(
+            temperature=self.direct_oneshot_temperature,
+            max_tokens=2048  # Default max tokens for oneshot
+        )
+        
         response_content, stats = self.llm_client.call(
-            prompt=problem_text, models=self.direct_oneshot_model_names, temperature=self.direct_oneshot_temperature
+            prompt=problem_text, 
+            models=self.direct_oneshot_model_names, 
+            config=oneshot_config
         )
         logger.debug(f"Direct {mode} response from {stats.model_name}:\n{response_content}")
         logger.info(f"LLM call ({stats.model_name}) for {mode}: Duration: {stats.call_duration_seconds:.2f}s, Tokens (C:{stats.completion_tokens}, P:{stats.prompt_tokens})")

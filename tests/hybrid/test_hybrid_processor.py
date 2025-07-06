@@ -8,6 +8,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from src.llm_client import LLMClient
+from src.llm_config import LLMConfig
 from src.hybrid.processor import HybridProcessor
 from src.hybrid.dataclasses import HybridConfig, HybridResult, LLMCallStats
 
@@ -51,6 +52,7 @@ class TestHybridProcessor(unittest.TestCase):
         self.assertEqual(result.reasoning_call_stats, mock_reasoning_stats)
         self.assertEqual(result.response_call_stats, mock_response_stats)
         self.assertIsNone(result.error_message)
+        self.assertIsNotNone(result.detected_reasoning_format)  # Should have detected a format
 
         # Verify LLM client was called correctly
         expected_reasoning_prompt = f"Reason: {problem_desc} {self.default_config.reasoning_complete_token}"
@@ -59,15 +61,22 @@ class TestHybridProcessor(unittest.TestCase):
         calls = self.mock_llm_client.call.call_args_list
         self.assertEqual(len(calls), 2)
 
-        # Reasoning call
+        # Reasoning call - check the new LLMConfig structure
         self.assertEqual(calls[0][1]['prompt'], expected_reasoning_prompt)
         self.assertEqual(calls[0][1]['models'], [self.default_config.reasoning_model_name])
-        self.assertEqual(calls[0][1]['max_tokens'], self.default_config.max_reasoning_tokens)
+        reasoning_config = calls[0][1]['config']
+        self.assertIsInstance(reasoning_config, LLMConfig)
+        self.assertEqual(reasoning_config.temperature, self.default_config.reasoning_model_temperature)
+        self.assertEqual(reasoning_config.max_tokens, self.default_config.max_reasoning_tokens)
+        self.assertEqual(reasoning_config.stop, [self.default_config.reasoning_complete_token])
 
-        # Response call
+        # Response call - check the new LLMConfig structure
         self.assertEqual(calls[1][1]['prompt'], expected_response_prompt)
         self.assertEqual(calls[1][1]['models'], [self.default_config.response_model_name])
-        self.assertEqual(calls[1][1]['max_tokens'], self.default_config.max_response_tokens)
+        response_config = calls[1][1]['config']
+        self.assertIsInstance(response_config, LLMConfig)
+        self.assertEqual(response_config.temperature, self.default_config.response_model_temperature)
+        self.assertEqual(response_config.max_tokens, self.default_config.max_response_tokens)
 
 
     def test_run_reasoning_call_fails(self):
@@ -139,6 +148,95 @@ class TestHybridProcessor(unittest.TestCase):
         self.assertTrue(result.succeeded) # Processor currently continues
         self.assertEqual(result.extracted_reasoning, "") # Empty string before token
         self.assertEqual(result.final_answer, "Final answer based on empty reasoning.")
+
+    def test_stop_sequence_for_early_cancellation(self):
+        """Test that stop sequences are properly configured for early cancellation to save tokens"""
+        problem_desc = "Test problem for stop sequence"
+        reasoning_output_text = "Some reasoning here"
+        final_answer_text = "Final answer"
+
+        mock_reasoning_stats = LLMCallStats(model_name="reasoning/dummy", completion_tokens=5, prompt_tokens=5, call_duration_seconds=0.2)
+        mock_response_stats = LLMCallStats(model_name="response/dummy", completion_tokens=8, prompt_tokens=12, call_duration_seconds=0.4)
+
+        self.mock_llm_client.call.side_effect = [
+            (reasoning_output_text, mock_reasoning_stats),
+            (final_answer_text, mock_response_stats)
+        ]
+
+        result = self.processor.run(problem_desc)
+
+        # Verify that the reasoning call includes the stop sequence
+        calls = self.mock_llm_client.call.call_args_list
+        reasoning_config = calls[0][1]['config']
+        self.assertIsInstance(reasoning_config, LLMConfig)
+        self.assertIn(self.default_config.reasoning_complete_token, reasoning_config.stop)
+
+    def test_deepseek_r1_thinking_tags_extraction(self):
+        """Test extraction of DeepSeek-R1 style thinking tags"""
+        problem_desc = "What is the square root of 16?"
+        reasoning_output_text = """<THINKING>
+Mathematical reasoning process here.
+Step by step calculation approach.
+Final verification of the result.
+</THINKING>
+
+The answer is 4."""
+        
+        mock_reasoning_stats = LLMCallStats(model_name="deepseek/r1", completion_tokens=20, prompt_tokens=5, call_duration_seconds=0.5)
+        mock_response_stats = LLMCallStats(model_name="response/dummy", completion_tokens=8, prompt_tokens=12, call_duration_seconds=0.4)
+
+        # Configure for DeepSeek-R1 model
+        config = HybridConfig(
+            reasoning_model_name="deepseek/r1",
+            response_model_name="response/dummy",
+            reasoning_complete_token="<DONE>",  # Won't be used for THINKING tags
+        )
+        processor = HybridProcessor(llm_client=self.mock_llm_client, config=config)
+
+        self.mock_llm_client.call.side_effect = [
+            (reasoning_output_text, mock_reasoning_stats),
+            ("The final answer is 4.", mock_response_stats)
+        ]
+
+        result = processor.run(problem_desc)
+
+        self.assertTrue(result.succeeded)
+        # Test structure rather than exact content
+        self.assertGreater(len(result.extracted_reasoning.strip()), 0)  # Should extract non-empty reasoning
+        self.assertGreaterEqual(len(result.extracted_reasoning.split()), 3)  # Should have multiple words/tokens
+        self.assertNotIn("<THINKING>", result.extracted_reasoning)  # Tags should be removed
+        self.assertNotIn("</THINKING>", result.extracted_reasoning)  # Tags should be removed
+        self.assertEqual(result.detected_reasoning_format, "deepseek_r1")
+        self.assertEqual(result.final_answer, "The final answer is 4.")
+
+    def test_format_hint_based_on_model_name(self):
+        """Test that format hints are correctly determined from model names"""
+        # Test DeepSeek-R1 model name detection
+        config_deepseek = HybridConfig(
+            reasoning_model_name="deepseek/deepseek-r1-distill-qwen-7b",
+            response_model_name="response/dummy"
+        )
+        processor_deepseek = HybridProcessor(llm_client=self.mock_llm_client, config=config_deepseek)
+        hint = processor_deepseek._get_format_hint()
+        self.assertEqual(hint.value, "deepseek_r1")
+
+        # Test OpenAI o1 model name detection
+        config_openai = HybridConfig(
+            reasoning_model_name="openai/o1-preview",
+            response_model_name="response/dummy"
+        )
+        processor_openai = HybridProcessor(llm_client=self.mock_llm_client, config=config_openai)
+        hint = processor_openai._get_format_hint()
+        self.assertEqual(hint.value, "openai_o1")
+
+        # Test Gemini model name detection
+        config_gemini = HybridConfig(
+            reasoning_model_name="google/gemini-2.0-flash-thinking",
+            response_model_name="response/dummy"
+        )
+        processor_gemini = HybridProcessor(llm_client=self.mock_llm_client, config=config_gemini)
+        hint = processor_gemini._get_format_hint()
+        self.assertEqual(hint.value, "gemini_thinking")
 
 if __name__ == '__main__':
     unittest.main()

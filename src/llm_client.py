@@ -1,7 +1,8 @@
 import time
 import requests
 import logging
-from typing import List, Optional, Tuple, cast
+import json
+from typing import List, Optional, Tuple, cast, Dict, Any, Iterator
 
 # Assume llm_accounting is installed and available
 from llm_accounting import LLMAccounting
@@ -16,6 +17,23 @@ from src.aot.dataclasses import LLMCallStats
 from src.aot.constants import OPENROUTER_API_URL, HTTP_REFERER, APP_TITLE
 
 from src.llm_config import LLMConfig # Added import
+
+class StreamingResponse:
+    """Container for streaming response data"""
+    def __init__(self):
+        self.content = ""
+        self.reasoning = ""
+        self.usage = {}
+        self.model_name = ""
+        self.finish_reason = None
+        
+    def add_content(self, text: str):
+        """Add content chunk"""
+        self.content += text
+        
+    def add_reasoning(self, text: str):
+        """Add reasoning chunk"""
+        self.reasoning += text
 
 class LLMClient:
     def __init__(self, api_key: str, api_url: str = OPENROUTER_API_URL, http_referer: str = HTTP_REFERER, app_title: str = APP_TITLE,
@@ -44,170 +62,158 @@ class LLMClient:
             self.audit_logger = None
         self.enable_audit_logging = enable_audit_logging # This should be set based on the parameter
 
-    def call(self, prompt: str, models: List[str], config: LLMConfig) -> Tuple[str, LLMCallStats]:
+    def call_with_reasoning(self, prompt: str, models: List[str], config: LLMConfig, 
+                           reasoning_config: Optional[Dict[str, Any]] = None,
+                           use_streaming: bool = False,
+                           model_headers: Optional[Dict[str, str]] = None) -> Tuple[str, str, LLMCallStats]:
+        """
+        Enhanced call method with reasoning token support.
+        
+        Returns:
+            Tuple of (content, reasoning, stats)
+        """
+        if use_streaming:
+            return self._call_streaming_with_reasoning(prompt, models, config, reasoning_config, model_headers)
+        else:
+            return self._call_non_streaming_with_reasoning(prompt, models, config, reasoning_config, model_headers)
+    
+    def _call_streaming_with_reasoning(self, prompt: str, models: List[str], config: LLMConfig, 
+                                     reasoning_config: Optional[Dict[str, Any]] = None,
+                                     model_headers: Optional[Dict[str, str]] = None) -> Tuple[str, str, LLMCallStats]:
+        """Handle streaming calls with reasoning token support"""
         if not models:
             logging.error("No models provided for LLM call.")
-            return "Error: No models configured for call.", LLMCallStats(model_name="N/A")
+            return "Error: No models configured for call.", "", LLMCallStats(model_name="N/A")
         
-        last_error_content_for_failover = f"Error: All models ({', '.join(models)}) in the list failed."
-        last_error_stats_for_failover = LLMCallStats(model_name=models[0] if models else "N/A")
-        request_id = None # Initialize request_id
-
         for model_name in models:
-            # Construct payload using LLMConfig
+            # Prepare headers
+            headers = self.http_headers.copy()
+            if model_headers:
+                headers.update(model_headers)
+            
+            # Construct payload
             payload = {
                 "model": model_name,
                 "messages": [{"role": "user", "content": prompt}],
-                **config.to_payload_dict() # Unpack parameters from config
+                "stream": True,
+                **config.to_payload_dict()
             }
+            
+            # Add reasoning configuration if provided
+            if reasoning_config:
+                payload["reasoning"] = reasoning_config
+            
             current_call_stats = LLMCallStats(model_name=model_name)
             call_start_time = time.monotonic()
             
             try:
-                if self.enable_rate_limiting: # Now always uses real accounting
-                    allowed, reason = self.accounting.check_quota(
-                        model=model_name,
-                        username="api_user",
-                        caller_name="LLMClient",
-                        input_tokens=len(prompt.split()) # Approximate token count for quota check
-                    )
-                    if not allowed:
-                        logging.warning(f"Rate limit exceeded for model {model_name}: {reason}. Trying next model if available.")
-                        last_error_content_for_failover = f"Error: Rate limit exceeded - {reason}"
-                        last_error_stats_for_failover = current_call_stats
-                        continue
-
-                # Log the request before making the API call
-                self.accounting.track_usage( # Now always uses real accounting
-                    model=model_name,
-                    prompt_tokens=len(prompt.split()),
-                    caller_name="LLMClient",
-                    username="api_user"
-                )
-                logging.info(f"Attempting LLM call with model: {model_name}")
-
-                response = requests.post(self.api_url, headers=self.http_headers, json=payload, timeout=90)
-                current_call_stats.call_duration_seconds = time.monotonic() - call_start_time
+                logging.info(f"Attempting streaming LLM call with model: {model_name}")
                 
-                response_payload = None
-                content = None # Initialize content here
-
-                try:
-                    response_payload = response.json()
-                    # If JSON parsing succeeds, extract content as before
-                    if "error" in response_payload:
-                        error_msg = response_payload['error'].get('message', str(response_payload['error']))
-                        logging.error(f"LLM API Error ({model_name}) in 2xx response: {error_msg}")
-                        content = f"Error: API returned an error - {error_msg}"
-                    elif not response_payload.get("choices") or not response_payload["choices"][0].get("message"):
-                        logging.error(f"Unexpected API response structure from {model_name}: {response_payload}")
-                        content = "Error: Unexpected API response structure"
-                    else:
-                        content = response_payload["choices"][0]["message"]["content"]
-                    
-                    usage = response_payload.get("usage", {})
-                except requests.exceptions.JSONDecodeError:
-                    # If JSON parsing fails, but status is OK, use raw text
-                    if response.status_code == 200:
-                        logging.warning(f"Could not parse JSON response from {model_name}. Status: {response.status_code}, Body: {response.text}. Returning raw text.")
-                        content = response.text # <--- CHANGE HERE: Use raw text
-                        usage = {} # No usage info if JSON parsing failed
-                    else:
-                        logging.warning(f"Could not parse JSON response from {model_name}. Status: {response.status_code}, Body: {response.text}. Treating as error.")
-                        content = f"Error: Could not parse response from {model_name} (Status: {response.status_code})"
-                        usage = {}
-
-                if 400 <= response.status_code < 600:
-                    error_body_text = response.text
-                    if response_payload is not None:
-                        response_dict = response_payload
-                        if 'error' in response_dict:
-                            error_body_text = str(response_dict.get('error', {}).get('message', error_body_text))
-                    
-                    logging.warning(f"API call to {model_name} failed with HTTP status {response.status_code}: {error_body_text}. Trying next model if available.")
-                    last_error_content_for_failover = f"Error: API call to {model_name} (HTTP {response.status_code}) - {error_body_text}"
-                    
-                    if response_payload is not None: # Use response_payload if available for usage
-                        usage = response_payload.get("usage", {})
-                        current_call_stats.completion_tokens = usage.get("completion_tokens", 0)
-                        current_call_stats.prompt_tokens = usage.get("prompt_tokens", 0)
-                    else: # If no JSON payload, usage is unknown
-                        current_call_stats.completion_tokens = 0
-                        current_call_stats.prompt_tokens = 0
-                    
-                    self.accounting.track_usage( # Now always uses real accounting
-                        model=model_name,
-                        prompt_tokens=current_call_stats.prompt_tokens,
-                        completion_tokens=current_call_stats.completion_tokens,
-                        execution_time=current_call_stats.call_duration_seconds,
-                        caller_name="LLMClient",
-                        username="api_user"
-                    )
-                    last_error_stats_for_failover = current_call_stats
-                    continue 
-
+                response = requests.post(self.api_url, headers=headers, json=payload, stream=True, timeout=90)
                 response.raise_for_status()
                 
-                # After content is determined, proceed with usage tracking and audit logging
+                # Process streaming response
+                streaming_response = StreamingResponse()
+                streaming_response.model_name = model_name
+                
+                for line in response.iter_lines():
+                    if line:
+                        line_text = line.decode('utf-8')
+                        if line_text.startswith('data: '):
+                            data_text = line_text[6:]  # Remove 'data: ' prefix
+                            
+                            if data_text.strip() == '[DONE]':
+                                break
+                                
+                            try:
+                                chunk_data = json.loads(data_text)
+                                self._process_streaming_chunk(chunk_data, streaming_response)
+                            except json.JSONDecodeError:
+                                continue
+                
+                current_call_stats.call_duration_seconds = time.monotonic() - call_start_time
+                
+                # Extract final usage if available
+                if streaming_response.usage:
+                    current_call_stats.completion_tokens = streaming_response.usage.get("completion_tokens", 0)
+                    current_call_stats.prompt_tokens = streaming_response.usage.get("prompt_tokens", 0)
+                
+                # Track usage
+                self.accounting.track_usage(
+                    model=model_name,
+                    prompt_tokens=current_call_stats.prompt_tokens,
+                    completion_tokens=current_call_stats.completion_tokens,
+                    execution_time=current_call_stats.call_duration_seconds,
+                    caller_name="LLMClient",
+                    username="api_user"
+                )
+                
+                return streaming_response.content, streaming_response.reasoning, current_call_stats
+                
+            except Exception as e:
+                current_call_stats.call_duration_seconds = time.monotonic() - call_start_time
+                logging.warning(f"Streaming call to {model_name} failed: {e}. Trying next model if available.")
+                
+                if model_name == models[-1]:  # Last model
+                    return f"Error: All streaming calls failed. Last error: {e}", "", current_call_stats
+                continue
+        
+        return "Error: All models failed.", "", LLMCallStats(model_name=models[0] if models else "N/A")
+    
+    def _call_non_streaming_with_reasoning(self, prompt: str, models: List[str], config: LLMConfig, 
+                                         reasoning_config: Optional[Dict[str, Any]] = None,
+                                         model_headers: Optional[Dict[str, str]] = None) -> Tuple[str, str, LLMCallStats]:
+        """Handle non-streaming calls with reasoning token support"""
+        if not models:
+            logging.error("No models provided for LLM call.")
+            return "Error: No models configured for call.", "", LLMCallStats(model_name="N/A")
+        
+        for model_name in models:
+            # Prepare headers
+            headers = self.http_headers.copy()
+            if model_headers:
+                headers.update(model_headers)
+            
+            # Construct payload
+            payload = {
+                "model": model_name,
+                "messages": [{"role": "user", "content": prompt}],
+                **config.to_payload_dict()
+            }
+            
+            # Add reasoning configuration if provided
+            if reasoning_config:
+                payload["reasoning"] = reasoning_config
+            
+            current_call_stats = LLMCallStats(model_name=model_name)
+            call_start_time = time.monotonic()
+            
+            try:
+                logging.info(f"Attempting non-streaming LLM call with model: {model_name}")
+                
+                response = requests.post(self.api_url, headers=headers, json=payload, timeout=90)
+                current_call_stats.call_duration_seconds = time.monotonic() - call_start_time
+                
+                response.raise_for_status()
+                response_data = response.json()
+                
+                # Extract content and reasoning
+                content = ""
+                reasoning = ""
+                
+                if "choices" in response_data and response_data["choices"]:
+                    choice = response_data["choices"][0]
+                    message = choice.get("message", {})
+                    content = message.get("content", "")
+                    reasoning = message.get("reasoning", "")
+                
+                # Extract usage
+                usage = response_data.get("usage", {})
                 current_call_stats.completion_tokens = usage.get("completion_tokens", 0)
                 current_call_stats.prompt_tokens = usage.get("prompt_tokens", 0)
-
-                self.accounting.track_usage( # Now always uses real accounting
-                    model=model_name,
-                    prompt_tokens=current_call_stats.prompt_tokens,
-                    completion_tokens=current_call_stats.completion_tokens,
-                    execution_time=current_call_stats.call_duration_seconds,
-                    caller_name="LLMClient",
-                    username="api_user"
-                )
-
-                if self.enable_audit_logging and self.audit_logger: # audit_logger will be None if not available
-                    self.audit_logger.log_prompt(
-                        app_name="LLMClient",
-                        user_name="api_user",
-                        model=model_name,
-                        prompt_text=prompt
-                    )
-                    # Only log response if it was a valid JSON payload, otherwise it's raw text
-                    if response_payload is not None:
-                        response_data = cast(dict, response_payload) 
-                        self.audit_logger.log_response(
-                            app_name="LLMClient",
-                            user_name="api_user",
-                            model=model_name,
-                            response_text=content,
-                            remote_completion_id=response_data.get("id")
-                        )
-                    else:
-                        logging.debug(f"Skipping audit log for raw text response from {model_name}.")
-
-                if content.startswith("Error:"): 
-                    if model_name != models[-1]: 
-                         logging.warning(f"LLM call to {model_name} resulted in error: {content}. Trying next model.")
-                         last_error_content_for_failover = content
-                         last_error_stats_for_failover = current_call_stats
-                         continue
-                else: 
-                    if current_call_stats.completion_tokens == 0 and content:
-                         logging.warning(f"completion_tokens reported as 0 from {model_name}, but content was received.")
                 
-                return content, current_call_stats
-
-            except requests.exceptions.HTTPError as e:
-                current_call_stats.call_duration_seconds = time.monotonic() - call_start_time
-                response_data_for_log = None
-                if e.response is not None:
-                    try:
-                        response_data_for_log = e.response.json()
-                        usage = response_data_for_log.get("usage", {})
-                        current_call_stats.completion_tokens = usage.get("completion_tokens", 0)
-                        current_call_stats.prompt_tokens = usage.get("prompt_tokens", 0)
-                    except: 
-                        response_data_for_log = {"error": str(e), "status_code": e.response.status_code, "text": e.response.text}
-                else:
-                    response_data_for_log = {"error": str(e)}
-
-                self.accounting.track_usage( # Now always uses real accounting
+                # Track usage
+                self.accounting.track_usage(
                     model=model_name,
                     prompt_tokens=current_call_stats.prompt_tokens,
                     completion_tokens=current_call_stats.completion_tokens,
@@ -216,44 +222,50 @@ class LLMClient:
                     username="api_user"
                 )
                 
-                if e.response is not None and (400 <= e.response.status_code < 500 and e.response.status_code not in [401, 403, 429]):
-                    logging.warning(f"API request to {model_name} failed with HTTPError (status {e.response.status_code}): {e}. Trying next model.")
-                    last_error_content_for_failover = f"Error: API call to {model_name} (HTTP {e.response.status_code}) - {e}"
-                    last_error_stats_for_failover = current_call_stats
-                    continue
-                else: 
-                    logging.error(f"API request to {model_name} failed with non-failover HTTPError: {e}")
-                    return f"Error: API call failed - {e}", current_call_stats
-
-            except requests.exceptions.Timeout as e:
+                return content, reasoning, current_call_stats
+                
+            except Exception as e:
                 current_call_stats.call_duration_seconds = time.monotonic() - call_start_time
-                self.accounting.track_usage( # Now always uses real accounting
-                    model=model_name,
-                    execution_time=current_call_stats.call_duration_seconds,
-                    caller_name="LLMClient",
-                    username="api_user"
-                )
-                logging.warning(f"API request to {model_name} timed out after {current_call_stats.call_duration_seconds:.2f}s. Trying next model if available.")
-                last_error_content_for_failover = f"Error: API call to {model_name} timed out"
-                last_error_stats_for_failover = current_call_stats
+                logging.warning(f"Non-streaming call to {model_name} failed: {e}. Trying next model if available.")
+                
+                if model_name == models[-1]:  # Last model
+                    return f"Error: All non-streaming calls failed. Last error: {e}", "", current_call_stats
                 continue
-
-            except requests.exceptions.RequestException as e: 
-                current_call_stats.call_duration_seconds = time.monotonic() - call_start_time
-                self.accounting.track_usage( # Now always uses real accounting
-                    model=model_name,
-                    execution_time=current_call_stats.call_duration_seconds,
-                    caller_name="LLMClient",
-                    username="api_user"
-                )
-                logging.warning(f"API request to {model_name} failed with RequestException: {e}. Trying next model if available.")
-                last_error_content_for_failover = f"Error: API call to {model_name} failed - {e}"
-                last_error_stats_for_failover = current_call_stats
-                continue
-            
-            finally:
-                if model_name != models[-1]:
-                    request_id = None
         
-        logging.error(f"All models ({', '.join(models)}) failed. Last error from model '{last_error_stats_for_failover.model_name}': {last_error_content_for_failover}")
-        return last_error_content_for_failover, last_error_stats_for_failover
+        return "Error: All models failed.", "", LLMCallStats(model_name=models[0] if models else "N/A")
+    
+    def _process_streaming_chunk(self, chunk_data: Dict[str, Any], streaming_response: StreamingResponse):
+        """Process individual streaming chunks"""
+        if "choices" not in chunk_data or not chunk_data["choices"]:
+            return
+        
+        choice = chunk_data["choices"][0]
+        delta = choice.get("delta", {})
+        
+        # Handle content
+        if "content" in delta and delta["content"]:
+            streaming_response.add_content(delta["content"])
+        
+        # Handle reasoning
+        if "reasoning" in delta and delta["reasoning"]:
+            streaming_response.add_reasoning(delta["reasoning"])
+        
+        # Handle finish reason
+        if "finish_reason" in choice and choice["finish_reason"]:
+            streaming_response.finish_reason = choice["finish_reason"]
+        
+        # Handle usage (usually comes at the end)
+        if "usage" in chunk_data:
+            streaming_response.usage = chunk_data["usage"]
+
+    def call(self, prompt: str, models: List[str], config: LLMConfig) -> Tuple[str, LLMCallStats]:
+        """Legacy call method for backward compatibility"""
+        content, reasoning, stats = self.call_with_reasoning(prompt, models, config)
+        
+        # If reasoning was extracted, combine it with content for backward compatibility
+        if reasoning:
+            # For backward compatibility, combine reasoning and content
+            combined_content = f"{reasoning}\n\n{content}" if content else reasoning
+            return combined_content, stats
+        
+        return content, stats
