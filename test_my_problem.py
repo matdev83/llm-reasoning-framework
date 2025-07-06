@@ -202,12 +202,12 @@ def test_model_default_reasoning_configs():
         {
             "name": "Gemini Thinking",
             "model": "google/gemini-2.5-flash-preview:thinking",
-            "expected_default": {"enabled": True, "max_tokens": 32000, "exclude": False}
+            "expected_default": {"enabled": True, "max_tokens": 8000, "exclude": False}
         },
         {
             "name": "Anthropic Claude",
             "model": "anthropic/claude-3.7-sonnet",
-            "expected_default": {"enabled": True, "max_tokens": 8000, "exclude": False}
+            "expected_default": {"enabled": True, "max_tokens": 4000, "exclude": False}
         },
         {
             "name": "DeepSeek-R1",
@@ -254,8 +254,8 @@ def test_model_default_reasoning_configs():
     print("\n" + "=" * 70)
     print("📋 Default Configuration Summary:")
     print("   • OpenAI/Grok models: effort='high' (best reasoning quality)")
-    print("   • Gemini Thinking: max_tokens=32,000 (maximum capability)")
-    print("   • Anthropic Claude: max_tokens=8,000 (high effort equivalent)")
+    print("   • Gemini Thinking: max_tokens=8,000 (within output limits)")
+    print("   • Anthropic Claude: max_tokens=4,000 (within output limits)")
     print("   • DeepSeek-R1: enabled=True (basic reasoning only)")
     print("   • Other models: No reasoning support")
 
@@ -385,7 +385,7 @@ def test_reasoning_with_gemini():
         response_model_name="google/gemini-2.5-flash-preview",
         reasoning_config=ReasoningConfig(
             enabled=True,
-            max_tokens=32000,  # High reasoning token allocation
+            max_tokens=8000,  # Realistic reasoning token allocation
             exclude=False
         ),
         use_streaming=True
@@ -396,8 +396,8 @@ def test_reasoning_with_gemini():
     print(f"Effective token limits: {token_limits}")
     
     # Verify we have adequate space for both reasoning and response
-    expected_reasoning = 40000  # Should be 40K for Gemini
-    expected_response = 8000    # Should be 8K for Gemini
+    expected_reasoning = 12000  # Should be 12K for Gemini (within output limits)
+    expected_response = 4000    # Should be 4K for Gemini (within output limits)
     
     assert token_limits["max_reasoning_tokens"] == expected_reasoning, \
         f"Expected {expected_reasoning} reasoning tokens, got {token_limits['max_reasoning_tokens']}"
@@ -456,32 +456,32 @@ def test_token_optimization():
             "name": "Gemini Thinking (High Capacity)",
             "reasoning_model": "google/gemini-2.5-flash-preview:thinking",
             "response_model": "google/gemini-2.5-flash-preview",
-            "expected_reasoning_tokens": 40000,
-            "expected_response_tokens": 8000,
-            "reasoning_config": ReasoningConfig(enabled=True, max_tokens=32000, exclude=False)
-        },
-        {
-            "name": "Claude (Balanced)",
-            "reasoning_model": "anthropic/claude-3.5-sonnet-20241022",
-            "response_model": "anthropic/claude-3.5-sonnet-20241022",
             "expected_reasoning_tokens": 12000,
             "expected_response_tokens": 4000,
             "reasoning_config": ReasoningConfig(enabled=True, max_tokens=8000, exclude=False)
         },
         {
+            "name": "Claude (Balanced)",
+            "reasoning_model": "anthropic/claude-3.5-sonnet-20241022",
+            "response_model": "anthropic/claude-3.5-sonnet-20241022",
+            "expected_reasoning_tokens": 6000,
+            "expected_response_tokens": 2000,
+            "reasoning_config": ReasoningConfig(enabled=True, max_tokens=4000, exclude=False)
+        },
+        {
             "name": "OpenAI o-series (Efficient)",
             "reasoning_model": "openai/o1-preview",
             "response_model": "openai/gpt-4o",
-            "expected_reasoning_tokens": 8000,
-            "expected_response_tokens": 3000,
+            "expected_reasoning_tokens": 32000,
+            "expected_response_tokens": 8000,
             "reasoning_config": ReasoningConfig(enabled=True, effort="high", exclude=False)
         },
         {
             "name": "DeepSeek-R1 (Basic)",
             "reasoning_model": "deepseek/deepseek-r1:nitro",
             "response_model": "deepseek/deepseek-r1:nitro",
-            "expected_reasoning_tokens": 2000,
-            "expected_response_tokens": 1500,
+            "expected_reasoning_tokens": 6000,
+            "expected_response_tokens": 2000,
             "reasoning_config": ReasoningConfig(enabled=True, exclude=False)
         }
     ]
@@ -540,11 +540,11 @@ def test_token_optimization():
     
     print("\n" + "=" * 80)
     print("📋 Token Optimization Summary:")
-    print("   • Gemini Thinking: 40K reasoning + 8K response = 48K total")
-    print("   • Claude: 12K reasoning + 4K response = 16K total")
-    print("   • OpenAI o-series: 8K reasoning + 3K response = 11K total")
-    print("   • DeepSeek-R1: 2K reasoning + 1.5K response = 3.5K total")
-    print("\n💡 Higher allocations for models with larger context windows and reasoning capabilities")
+    print("   • OpenAI o-series: 32K reasoning + 8K response = 40K total (highest output limits)")
+    print("   • Gemini Thinking: 12K reasoning + 4K response = 16K total (within output limits)")
+    print("   • Claude: 6K reasoning + 2K response = 8K total (within output limits)")
+    print("   • DeepSeek-R1: 6K reasoning + 2K response = 8K total (within output limits)")
+    print("\n💡 Allocations are based on actual OpenRouter API output limits, not context windows")
 
 def get_use_case_description(model_name: str) -> str:
     """Get use case description for a model"""
@@ -559,6 +559,90 @@ def get_use_case_description(model_name: str) -> str:
     else:
         return "General purpose reasoning"
 
+def test_qwen_prompt_activation():
+    """Test Qwen models' prompt-based reasoning activation"""
+    print("\n=== Testing Qwen Prompt-Based Reasoning Activation ===")
+    
+    # Test different Qwen models
+    qwen_models = [
+        "qwen/qwen3-4b",
+        "qwen/qwen3-14b", 
+        "qwen/qwen3-32b",
+        "qwen/qwq-32b",
+        "qwen/qwen3-235b-a22b"
+    ]
+    
+    for model in qwen_models:
+        print(f"\n🧠 Testing {model}:")
+        
+        # Create config for this model
+        config = HybridConfig(
+            reasoning_model_name=model,
+            response_model_name="anthropic/claude-3.5-sonnet-20241022",
+            reasoning_config=ReasoningConfig(enabled=True)
+        )
+        
+        # Test reasoning support detection
+        support = config.get_model_reasoning_support(model)
+        print(f"   ✓ Uses prompt activation: {support['uses_prompt_activation']}")
+        print(f"   ✓ Supports effort: {support['supports_effort']}")
+        print(f"   ✓ Supports max_tokens: {support['supports_max_tokens']}")
+        
+        # Test prompt modification with reasoning enabled
+        test_prompt = "Solve this math problem: What is 15 * 23?"
+        modified_prompt = config.apply_prompt_based_reasoning(
+            prompt=test_prompt,
+            model_name=model,
+            reasoning_config=ReasoningConfig(enabled=True)
+        )
+        print(f"   ✓ Enabled prompt: '{modified_prompt}'")
+        assert "/think" in modified_prompt, f"Expected /think in prompt for {model}"
+        
+        # Test prompt modification with reasoning disabled
+        disabled_prompt = config.apply_prompt_based_reasoning(
+            prompt=test_prompt,
+            model_name=model,
+            reasoning_config=ReasoningConfig(enabled=False)
+        )
+        print(f"   ✓ Disabled prompt: '{disabled_prompt}'")
+        assert "/no_think" in disabled_prompt, f"Expected /no_think in prompt for {model}"
+        
+        # Test token limits for different model sizes
+        token_limits = config.get_model_specific_token_limits(model)
+        print(f"   ✓ Reasoning tokens: {token_limits['max_reasoning_tokens']}")
+        print(f"   ✓ Response tokens: {token_limits['max_response_tokens']}")
+        
+        # Verify larger models get higher token allocations
+        if any(size in model.lower() for size in ["32b", "235b", "30b", "qwq"]):
+            assert token_limits["max_reasoning_tokens"] >= 12000, f"Large model {model} should have >=12K reasoning tokens"
+        else:
+            assert token_limits["max_reasoning_tokens"] >= 6000, f"Small model {model} should have >=6K reasoning tokens"
+    
+    # Test non-Qwen model doesn't get prompt modification
+    print(f"\n🔍 Testing non-Qwen model (should not modify prompt):")
+    config = HybridConfig(
+        reasoning_model_name="anthropic/claude-3.5-sonnet-20241022",
+        response_model_name="anthropic/claude-3.5-sonnet-20241022"
+    )
+    
+    test_prompt = "Solve this problem"
+    modified_prompt = config.apply_prompt_based_reasoning(
+        prompt=test_prompt,
+        model_name="anthropic/claude-3.5-sonnet-20241022",
+        reasoning_config=ReasoningConfig(enabled=True)
+    )
+    print(f"   ✓ Claude prompt unchanged: '{modified_prompt}'")
+    assert modified_prompt == test_prompt, "Non-Qwen models should not have prompt modified"
+    
+    print("\n" + "=" * 70)
+    print("📋 Qwen Prompt Activation Summary:")
+    print("   • Qwen models use /think and /no_think slash commands")
+    print("   • Prompt-based activation instead of API headers")
+    print("   • Larger models (32B+) get higher token allocations")
+    print("   • Automatic detection and activation based on model name")
+    print("   • Compatible with existing reasoning extraction")
+    print("=" * 70)
+
 def main():
     if len(sys.argv) < 2:
         print("Usage:")
@@ -568,6 +652,7 @@ def main():
         print("  python test_my_problem.py --test-token-limits  # Test model-specific token limits")
         print("  python test_my_problem.py --test-gemini  # Test reasoning with Gemini model and increased token limits")
         print("  python test_my_problem.py --test-optimization  # Test token optimization across all models")
+        print("  python test_my_problem.py --test-qwen-activation  # Test Qwen prompt-based reasoning activation")
         print()
         print("Examples:")
         print("  python test_my_problem.py \"What is 2+2?\"")
@@ -577,6 +662,7 @@ def main():
         print("  python test_my_problem.py --test-token-limits")
         print("  python test_my_problem.py --test-gemini")
         print("  python test_my_problem.py --test-optimization")
+        print("  python test_my_problem.py --test-qwen-activation")
         sys.exit(1)
     
     if sys.argv[1] == "--test-models":
@@ -597,6 +683,10 @@ def main():
     
     if sys.argv[1] == "--test-optimization":
         test_token_optimization()
+        return
+    
+    if sys.argv[1] == "--test-qwen-activation":
+        test_qwen_prompt_activation()
         return
     
     problem_text = sys.argv[1]

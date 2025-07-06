@@ -54,103 +54,201 @@ class HybridConfig:
         model_lower = model_name.lower()
         return any(keyword in model_lower for keyword in reasoning_models)
     
-    def _get_model_reasoning_support(self, model_name: str) -> Dict[str, bool]:
+    def get_model_reasoning_support(self, model_name: str) -> Dict[str, bool]:
         """
-        Determine which reasoning parameters a model supports.
+        Get model-specific reasoning support capabilities.
         
         Returns:
-            Dict with 'effort', 'max_tokens', and 'basic' support flags
+            Dict with boolean flags for supported reasoning features
         """
         model_lower = model_name.lower()
         
-        # OpenAI o-series models support effort levels
-        if any(pattern in model_lower for pattern in ["openai/o", "/o1", "/o3", "/o4"]):
-            return {"effort": True, "max_tokens": False, "basic": True}
+        # OpenAI o-series models: Use effort-based reasoning
+        if any(model in model_lower for model in ["o1", "o3", "o4"]):
+            return {
+                "supports_effort": True,
+                "supports_max_tokens": False,
+                "supports_exclude": True,
+                "uses_prompt_activation": False,  # Uses API headers
+                "reasoning_enabled_by_default": True
+            }
         
-        # Grok models support effort levels
+        # Grok models: Use effort-based reasoning  
         if "grok" in model_lower:
-            return {"effort": True, "max_tokens": False, "basic": True}
+            return {
+                "supports_effort": True,
+                "supports_max_tokens": False,
+                "supports_exclude": True,
+                "uses_prompt_activation": False,  # Uses API headers
+                "reasoning_enabled_by_default": True
+            }
         
-        # Anthropic models support max_tokens (including claude-3.7-sonnet)
-        if any(pattern in model_lower for pattern in ["anthropic/", "claude"]):
-            return {"effort": False, "max_tokens": True, "basic": True}
-        
-        # Gemini thinking models support max_tokens
+        # Gemini Thinking models: Use max_tokens-based reasoning
         if "gemini" in model_lower and "thinking" in model_lower:
-            return {"effort": False, "max_tokens": True, "basic": True}
+            return {
+                "supports_effort": False,
+                "supports_max_tokens": True,
+                "supports_exclude": True,
+                "uses_prompt_activation": False,  # Uses API headers
+                "reasoning_enabled_by_default": True
+            }
         
-        # DeepSeek and other reasoning models support basic reasoning but no effort/max_tokens control
-        if any(pattern in model_lower for pattern in ["deepseek", "r1", "qwq"]):
-            return {"effort": False, "max_tokens": False, "basic": True}
+        # Anthropic Claude models: Use max_tokens-based reasoning
+        if "anthropic" in model_lower or "claude" in model_lower:
+            return {
+                "supports_effort": False,
+                "supports_max_tokens": True,
+                "supports_exclude": True,
+                "uses_prompt_activation": False,  # Uses API headers
+                "reasoning_enabled_by_default": True
+            }
         
-        # Non-reasoning models
-        return {"effort": False, "max_tokens": False, "basic": False}
+        # Qwen models: Use prompt-based activation with slash commands
+        if "qwen" in model_lower or "qwq" in model_lower:
+            return {
+                "supports_effort": False,
+                "supports_max_tokens": False,
+                "supports_exclude": False,
+                "uses_prompt_activation": True,   # Uses /think and /no_think commands
+                "reasoning_enabled_by_default": True
+            }
+        
+        # DeepSeek-R1: Basic reasoning support
+        if "deepseek" in model_lower and ("r1" in model_lower or "reasoning" in model_lower):
+            return {
+                "supports_effort": False,
+                "supports_max_tokens": False,
+                "supports_exclude": False,
+                "uses_prompt_activation": False,  # Uses API headers
+                "reasoning_enabled_by_default": True
+            }
+        
+        # Default: No reasoning support
+        return {
+            "supports_effort": False,
+            "supports_max_tokens": False,
+            "supports_exclude": False,
+            "uses_prompt_activation": False,
+            "reasoning_enabled_by_default": False
+        }
     
-    def get_model_default_reasoning_config(self, model_name: str) -> Optional[ReasoningConfig]:
+    def get_model_default_reasoning_config(self, model_name: str) -> ReasoningConfig:
         """
         Get model-specific default reasoning configuration.
         
-        Based on OpenRouter documentation and model capabilities:
-        - OpenAI/Grok: effort="high" (best reasoning quality)
-        - Gemini Thinking: max_tokens=32000 (confirmed valid, no specific limit mentioned)
-        - Anthropic Claude: max_tokens=8000 (equivalent to "high" effort, within 32K limit)
-        - DeepSeek-R1: enabled=True (basic reasoning only)
-        - Other models: None (no reasoning support)
+        These defaults are based on actual OpenRouter API constraints and
+        optimal settings for each model family.
+        
+        Returns:
+            ReasoningConfig with appropriate defaults for the model
         """
-        support = self._get_model_reasoning_support(model_name)
-        
-        if not support["basic"]:
-            return None
-        
         model_lower = model_name.lower()
         
-        # OpenAI o-series models: Use high effort
-        if any(pattern in model_lower for pattern in ["openai/o", "/o1", "/o3", "/o4"]):
+        # OpenAI o-series models: Use effort-based reasoning (high output limits)
+        if any(model in model_lower for model in ["o1", "o3", "o4"]):
             return ReasoningConfig(
                 enabled=True,
-                effort="high",
+                effort="high",  # o-series models work best with high effort
+                max_tokens=None,
                 exclude=False
             )
         
-        # Grok models: Use high effort
+        # Grok models: Use effort-based reasoning
         elif "grok" in model_lower:
             return ReasoningConfig(
                 enabled=True,
-                effort="high",
+                effort="high",  # Grok models support effort levels
+                max_tokens=None,
                 exclude=False
             )
         
-        # Gemini Thinking models: Use 32K tokens (confirmed valid)
-        elif "gemini" in model_lower and "thinking" in model_lower:
+        # OpenAI GPT-4o models: Use effort-based reasoning (16K output limit)
+        elif "gpt-4o" in model_lower:
             return ReasoningConfig(
                 enabled=True,
-                max_tokens=32000,  # Maximum reasoning capability
+                effort="high",  # GPT-4o supports effort levels
+                max_tokens=None,
                 exclude=False
             )
         
-        # Anthropic Claude models: Use 8K tokens (equivalent to high effort)
-        elif any(pattern in model_lower for pattern in ["anthropic/", "claude"]):
+        # OpenAI GPT-4 models: Use effort-based reasoning (lower output limits)
+        elif "gpt-4" in model_lower:
             return ReasoningConfig(
                 enabled=True,
-                max_tokens=8000,  # High reasoning effort equivalent
+                effort="medium",  # More conservative for lower limits
+                max_tokens=None,
                 exclude=False
             )
         
-        # DeepSeek-R1 and other basic reasoning models: Just enable
-        else:
+        # OpenAI GPT-3.5 models: Use effort-based reasoning (low output limits)
+        elif "gpt-3.5" in model_lower:
             return ReasoningConfig(
                 enabled=True,
+                effort="low",  # Very conservative for low limits
+                max_tokens=None,
                 exclude=False
             )
+        
+        # Anthropic Claude models: Use max_tokens (estimated ~8K output limit)
+        elif "claude" in model_lower:
+            return ReasoningConfig(
+                enabled=True,
+                effort=None,
+                max_tokens=4000,  # Conservative reasoning token allocation
+                exclude=False
+            )
+        
+        # Gemini models: Use max_tokens (estimated ~8-16K output limit)
+        elif "gemini" in model_lower:
+            if "thinking" in model_lower:
+                return ReasoningConfig(
+                    enabled=True,
+                    effort=None,
+                    max_tokens=8000,  # Higher for thinking models
+                    exclude=False
+                )
+            else:
+                return ReasoningConfig(
+                    enabled=True,
+                    effort=None,
+                    max_tokens=4000,  # Conservative for regular models
+                    exclude=False
+                )
+        
+        # Qwen models: Use prompt-based activation (no API parameters)
+        elif "qwen" in model_lower or "qwq" in model_lower:
+            return ReasoningConfig(
+                enabled=True,
+                effort=None,       # Not supported - uses /think command
+                max_tokens=None,   # Not supported - uses /think command
+                exclude=False
+            )
+        
+        # DeepSeek and other reasoning models: Use max_tokens (estimated ~8K output limit)
+        elif any(model in model_lower for model in ["deepseek", "minimax"]):
+            return ReasoningConfig(
+                enabled=True,
+                effort=None,
+                max_tokens=4000,  # Conservative reasoning allocation
+                exclude=False
+            )
+        
+        # Default for unknown models: Conservative settings
+        return ReasoningConfig(
+            enabled=True,
+            effort="low",  # Safe default
+            max_tokens=None,
+            exclude=False
+        )
     
     def get_effective_reasoning_config(self, model_name: str) -> Optional[ReasoningConfig]:
         """
         Get the effective reasoning configuration for a specific model,
         filtering out unsupported parameters and applying defaults if needed.
         """
-        support = self._get_model_reasoning_support(model_name)
+        support = self.get_model_reasoning_support(model_name)
         
-        if not support["basic"]:
+        if not support["reasoning_enabled_by_default"]:
             # Model doesn't support reasoning at all
             return None
         
@@ -167,11 +265,11 @@ class HybridConfig:
         )
         
         # Add effort only if supported
-        if support["effort"] and base_config.effort:
+        if support["supports_effort"] and base_config.effort:
             effective_config.effort = base_config.effort
         
         # Add max_tokens only if supported
-        if support["max_tokens"] and base_config.max_tokens:
+        if support["supports_max_tokens"] and base_config.max_tokens:
             effective_config.max_tokens = base_config.max_tokens
         
         return effective_config
@@ -191,51 +289,101 @@ class HybridConfig:
 
     def get_model_specific_token_limits(self, model_name: str) -> Dict[str, int]:
         """
-        Get model-specific token limits based on reasoning capabilities.
+        Get model-specific token limits based on actual OpenRouter API constraints.
         
-        For models with high reasoning token usage, we need to ensure adequate
-        space for both reasoning and response tokens.
+        These limits are based on the real output token limits for each model family
+        on OpenRouter, not their context windows. Output tokens include both 
+        reasoning and response tokens.
         
         Returns:
             Dict with 'max_reasoning_tokens' and 'max_response_tokens'
         """
         model_lower = model_name.lower()
         
-        # Gemini Thinking models: Large context (1M tokens), high reasoning usage
-        if "gemini" in model_lower and "thinking" in model_lower:
+        # OpenAI o-series models: Very high output limits (100K tokens)
+        if any(model in model_lower for model in ["o1", "o3", "o4"]):
             return {
-                "max_reasoning_tokens": 40000,  # Increased to accommodate 32K reasoning + overhead
-                "max_response_tokens": 8000     # Generous space for detailed responses
+                "max_reasoning_tokens": 32000,  # High reasoning capacity
+                "max_response_tokens": 8000,    # Adequate response space
             }
         
-        # Anthropic Claude models: Large context (200K tokens), moderate reasoning usage
-        elif any(pattern in model_lower for pattern in ["anthropic/", "claude"]):
+        # OpenAI GPT-4o models: 16,384 max output tokens
+        elif "gpt-4o" in model_lower:
             return {
-                "max_reasoning_tokens": 12000,  # Increased to accommodate 8K reasoning + overhead
-                "max_response_tokens": 4000     # Good space for responses
+                "max_reasoning_tokens": 12000,  # Leave room for response
+                "max_response_tokens": 4000,    # Adequate response space
             }
         
-        # OpenAI o-series models: Variable context, effort-based reasoning
-        elif any(pattern in model_lower for pattern in ["openai/o", "/o1", "/o3", "/o4"]):
+        # OpenAI GPT-4 Turbo models: 4,096 max output tokens
+        elif "gpt-4" in model_lower and ("turbo" in model_lower or "preview" in model_lower):
             return {
-                "max_reasoning_tokens": 8000,   # Effort-based, usually moderate usage
-                "max_response_tokens": 3000     # Standard response space
+                "max_reasoning_tokens": 3000,   # Conservative limit
+                "max_response_tokens": 1000,    # Adequate response space
             }
         
-        # Grok models: Similar to OpenAI, effort-based
-        elif "grok" in model_lower:
+        # OpenAI GPT-4 base models: 8,192 max output tokens
+        elif "gpt-4" in model_lower:
             return {
-                "max_reasoning_tokens": 8000,   # Effort-based reasoning
-                "max_response_tokens": 3000     # Standard response space
+                "max_reasoning_tokens": 6000,   # Conservative limit
+                "max_response_tokens": 2000,    # Adequate response space
             }
         
-        # DeepSeek-R1 and other models: Moderate usage
-        else:
+        # OpenAI GPT-3.5 models: 4,096 max output tokens
+        elif "gpt-3.5" in model_lower:
             return {
-                "max_reasoning_tokens": 2000,   # Conservative for basic reasoning
-                "max_response_tokens": 1500     # Standard response space
+                "max_reasoning_tokens": 3000,   # Conservative limit
+                "max_response_tokens": 1000,    # Adequate response space
             }
-    
+        
+        # Anthropic Claude models: ~8,000 estimated max output tokens
+        elif "claude" in model_lower:
+            return {
+                "max_reasoning_tokens": 6000,   # Conservative reasoning limit
+                "max_response_tokens": 2000,    # Adequate response space
+            }
+        
+        # Gemini models: ~8,000-16,000 estimated max output tokens
+        elif "gemini" in model_lower:
+            # Gemini Thinking models may have higher limits
+            if "thinking" in model_lower:
+                return {
+                    "max_reasoning_tokens": 12000,  # Higher reasoning capacity
+                    "max_response_tokens": 4000,    # Adequate response space
+                }
+            else:
+                return {
+                    "max_reasoning_tokens": 6000,   # Conservative reasoning limit
+                    "max_response_tokens": 2000,    # Adequate response space
+                }
+        
+        # Qwen models: Moderate reasoning capabilities (various output limits)
+        elif "qwen" in model_lower or "qwq" in model_lower:
+            # QwQ-32B and larger Qwen models have higher output limits
+            if "qwq" in model_lower or any(size in model_lower for size in ["32b", "235b", "30b"]):
+                return {
+                    "max_reasoning_tokens": 12000,  # Higher reasoning allocation for larger models
+                    "max_response_tokens": 4000     # Adequate response space
+                }
+            else:
+                # Smaller Qwen models (4B, 8B, 14B)
+                return {
+                    "max_reasoning_tokens": 6000,   # Moderate reasoning allocation
+                    "max_response_tokens": 2000     # Adequate response space
+                }
+        
+        # DeepSeek and other reasoning models: ~8,000 estimated max output tokens
+        elif any(model in model_lower for model in ["deepseek", "minimax"]):
+            return {
+                "max_reasoning_tokens": 6000,   # Conservative reasoning limit
+                "max_response_tokens": 2000,    # Adequate response space
+            }
+        
+        # Default for unknown models: Conservative limits
+        return {
+            "max_reasoning_tokens": 3000,   # Safe default
+            "max_response_tokens": 1000,    # Safe default
+        }
+
     def get_effective_token_limits(self) -> Dict[str, int]:
         """
         Get the effective token limits for the current configuration.
@@ -264,6 +412,46 @@ class HybridConfig:
             "max_reasoning_tokens": max_reasoning,
             "max_response_tokens": max_response
         }
+
+    def apply_prompt_based_reasoning(self, prompt: str, model_name: str, reasoning_config: ReasoningConfig = None) -> str:
+        """
+        Apply prompt-based reasoning activation for models that use slash commands.
+        
+        For Qwen models, this adds /think or /no_think commands to activate/deactivate
+        reasoning mode through the prompt rather than API headers.
+        
+        Args:
+            prompt: The original user prompt
+            model_name: Name of the model being used
+            reasoning_config: Reasoning configuration (if any)
+            
+        Returns:
+            Modified prompt with reasoning activation commands
+        """
+        support = self.get_model_reasoning_support(model_name)
+        
+        # Only apply for models that use prompt-based activation
+        if not support["uses_prompt_activation"]:
+            return prompt
+        
+        # Determine if reasoning should be enabled
+        reasoning_enabled = True  # Default for Qwen models
+        
+        if reasoning_config:
+            reasoning_enabled = reasoning_config.enabled and not reasoning_config.exclude
+        
+        # Add the appropriate slash command for Qwen models
+        if "qwen" in model_name.lower() or "qwq" in model_name.lower():
+            if reasoning_enabled:
+                # Add /think command to activate reasoning mode
+                if "/think" not in prompt and "/no_think" not in prompt:
+                    return f"{prompt} /think"
+            else:
+                # Add /no_think command to disable reasoning mode
+                if "/think" not in prompt and "/no_think" not in prompt:
+                    return f"{prompt} /no_think"
+        
+        return prompt
 
 @dataclass
 class HybridResult:

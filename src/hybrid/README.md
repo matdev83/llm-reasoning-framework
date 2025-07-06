@@ -218,66 +218,87 @@ The Hybrid Reasoning Process combines the reasoning capabilities of advanced AI 
 - **Smart Defaults**: Zero-configuration setup with optimal model-specific settings
 
 ### 2. Model-Specific Token Limits
-The system automatically adjusts token allocations based on the reasoning model's capabilities and typical usage patterns:
+The system automatically adjusts token allocations based on **actual OpenRouter API output limits**, not context windows. These limits ensure requests don't exceed the real constraints:
 
-#### Gemini Thinking Models
-- **Context**: 1M tokens available
-- **Reasoning Tokens**: 40,000 (accommodates 32K reasoning + overhead)
-- **Response Tokens**: 8,000 (generous space for detailed responses)
-- **Use Case**: Complex reasoning tasks requiring extensive thought processes
+#### OpenAI o-series Models (100K output limit)
+- **Reasoning Tokens**: 32,000 (highest capacity for complex reasoning)
+- **Response Tokens**: 8,000 (ample space for detailed responses)
 
-#### Anthropic Claude Models
-- **Context**: 200K tokens available
-- **Reasoning Tokens**: 12,000 (accommodates 8K reasoning + overhead)
-- **Response Tokens**: 4,000 (good space for comprehensive responses)
-- **Use Case**: Balanced reasoning and response generation
+#### OpenAI GPT-4o Models (16K output limit)
+- **Reasoning Tokens**: 12,000 (balanced allocation)
+- **Response Tokens**: 4,000 (adequate response space)
 
-#### OpenAI o-series Models
-- **Context**: Variable (depends on model)
-- **Reasoning Tokens**: 8,000 (effort-based reasoning)
-- **Response Tokens**: 3,000 (standard response space)
-- **Use Case**: Efficient reasoning with controlled token usage
+#### Anthropic Claude Models (8K output limit)
+- **Reasoning Tokens**: 6,000 (conservative allocation)
+- **Response Tokens**: 2,000 (adequate response space)
 
-#### DeepSeek-R1 and Other Models
-- **Reasoning Tokens**: 2,000 (conservative for basic reasoning)
-- **Response Tokens**: 1,500 (standard response space)
-- **Use Case**: Basic reasoning tasks with minimal token overhead
+#### Gemini Models (8K-16K output limit)
+- **Thinking Models**: 12,000 reasoning + 4,000 response
+- **Regular Models**: 6,000 reasoning + 2,000 response
 
-### 3. Supported Models
+#### Qwen Models (Prompt-Based Activation)
+- **Large Models (32B+)**: 12,000 reasoning + 4,000 response
+- **Small Models (<32B)**: 6,000 reasoning + 2,000 response
+- **Special Feature**: Uses `/think` and `/no_think` slash commands instead of API headers
 
-#### OpenAI o-series & Grok
-- **Parameters**: `effort` levels ("low", "medium", "high")
-- **Default**: `effort="high"` (best reasoning quality)
-- **Models**: `openai/o1-preview`, `openai/o3-mini`, `x-ai/grok-*`
+#### DeepSeek-R1 Models (8K output limit)
+- **Reasoning Tokens**: 6,000 (conservative allocation)
+- **Response Tokens**: 2,000 (adequate response space)
 
-#### Anthropic Claude & Gemini Thinking
-- **Parameters**: `max_tokens` parameter
-- **Defaults**: 
-  - Gemini: `max_tokens=32000` (maximum reasoning capability)
-  - Claude: `max_tokens=8000` (high effort equivalent)
-- **Models**: `anthropic/claude-*`, `google/gemini-*:thinking`
+### 3. Reasoning Activation Methods
 
-#### DeepSeek-R1
-- **Parameters**: Basic reasoning only (no effort/max_tokens control)
-- **Default**: `enabled=True`
-- **Models**: `deepseek/deepseek-r1*`
-
-## Configuration
-
-### Basic Usage (Automatic Defaults)
+#### API Header-Based (Most Models)
+Models like OpenAI, Claude, Gemini, and DeepSeek use API headers for reasoning control:
 ```python
-from hybrid.dataclasses import HybridConfig
+reasoning_config = ReasoningConfig(
+    enabled=True,
+    effort="high",        # For OpenAI models
+    max_tokens=8000,      # For Claude/Gemini models
+    exclude=False
+)
+```
 
-# Zero configuration - uses optimal model-specific defaults
+#### Prompt-Based (Qwen Models)
+Qwen models use special slash commands in the prompt text:
+```python
+# Automatic activation for Qwen models
 config = HybridConfig(
-    reasoning_model_name="google/gemini-2.5-flash-preview:thinking",
-    response_model_name="google/gemini-2.5-flash-preview"
+    reasoning_model_name="qwen/qwen3-32b",
+    reasoning_config=ReasoningConfig(enabled=True)
 )
 
-# Automatic configuration:
-# - Reasoning tokens: 32,000 (via reasoning_config.max_tokens)
-# - Token limits: 40,000 reasoning + 8,000 response
-# - Streaming: enabled
+# Prompts are automatically modified:
+# "Solve this problem" → "Solve this problem /think"
+# "Solve this problem" → "Solve this problem /no_think" (when disabled)
+```
+
+### 4. Model Support Matrix
+
+| Model Family | Reasoning Method | Effort Levels | Max Tokens | Prompt Commands |
+|--------------|------------------|---------------|------------|-----------------|
+| **OpenAI o-series** | API Headers | ✅ (low/medium/high) | ❌ | ❌ |
+| **OpenAI GPT-4** | API Headers | ✅ (low/medium/high) | ❌ | ❌ |
+| **Grok** | API Headers | ✅ (low/medium/high) | ❌ | ❌ |
+| **Anthropic Claude** | API Headers | ❌ | ✅ (1-8000) | ❌ |
+| **Gemini Thinking** | API Headers | ❌ | ✅ (1-8000) | ❌ |
+| **Qwen/QwQ** | **Prompt Commands** | ❌ | ❌ | ✅ (/think, /no_think) |
+| **DeepSeek-R1** | API Headers | ❌ | ❌ | ❌ |
+
+## Configuration Examples
+
+### Basic Usage (Auto-Detection)
+```python
+from hybrid.orchestrator import HybridOrchestrator
+from hybrid.dataclasses import HybridConfig
+
+# Zero configuration - uses optimal defaults
+config = HybridConfig(
+    reasoning_model_name="qwen/qwen3-32b",  # Automatically uses /think commands
+    response_model_name="anthropic/claude-3.5-sonnet-20241022"
+)
+
+orchestrator = HybridOrchestrator(config)
+result = await orchestrator.run("Complex reasoning problem")
 ```
 
 ### Advanced Configuration
@@ -286,92 +307,125 @@ from hybrid.dataclasses import HybridConfig, ReasoningConfig
 
 # Custom reasoning configuration
 config = HybridConfig(
-    reasoning_model_name="google/gemini-2.5-flash-preview:thinking",
-    response_model_name="google/gemini-2.5-flash-preview",
+    reasoning_model_name="openai/o1-preview",
+    response_model_name="openai/gpt-4o",
     reasoning_config=ReasoningConfig(
         enabled=True,
-        max_tokens=16000,  # Custom reasoning token limit
+        effort="high",        # OpenAI-specific
         exclude=False
     ),
-    # Custom token limits (overrides model-specific defaults)
-    max_reasoning_tokens=20000,
-    max_response_tokens=5000,
-    use_streaming=True
+    use_streaming=True  # Enable for cost optimization
 )
 ```
 
-### Token Limit Behavior
-The system prioritizes token limits in this order:
-1. **Custom values**: If you explicitly set `max_reasoning_tokens` or `max_response_tokens`
-2. **Model-specific defaults**: Automatic allocation based on model capabilities
-3. **Fallback defaults**: 1,500 tokens each (for unknown models)
+### Model-Specific Examples
 
-## Usage Examples
-
-### High-Reasoning Tasks (Gemini)
+#### OpenAI Models
 ```python
-# Best for complex reasoning requiring extensive thought
-config = HybridConfig(
-    reasoning_model_name="google/gemini-2.5-flash-preview:thinking",
-    response_model_name="google/gemini-2.5-flash-preview"
-)
-# Automatically gets: 40K reasoning + 8K response tokens
-```
-
-### Balanced Tasks (Claude)
-```python
-# Good balance of reasoning and response quality
-config = HybridConfig(
-    reasoning_model_name="anthropic/claude-3.5-sonnet-20241022",
-    response_model_name="anthropic/claude-3.5-sonnet-20241022"
-)
-# Automatically gets: 12K reasoning + 4K response tokens
-```
-
-### Efficient Tasks (OpenAI)
-```python
-# Efficient reasoning with controlled costs
 config = HybridConfig(
     reasoning_model_name="openai/o1-preview",
-    response_model_name="openai/gpt-4o"
+    response_model_name="openai/gpt-4o",
+    reasoning_config=ReasoningConfig(effort="high")  # Uses effort levels
 )
-# Automatically gets: 8K reasoning + 3K response tokens
 ```
 
-## Token Optimization
-
-### Why Higher Limits for Gemini?
-- **32K Reasoning Tokens**: Gemini's default reasoning allocation
-- **40K Total Limit**: Ensures adequate space for reasoning + API overhead
-- **8K Response Tokens**: Prevents truncation of detailed responses
-- **1M Context**: Gemini's large context window supports these allocations
-
-### Streaming Benefits
-- **Real-time Processing**: Tokens processed as they arrive
-- **Cost Optimization**: Early termination possible for token-efficient workflows
-- **Better UX**: Faster perceived response times
-
-## Error Handling
-
-The system gracefully handles various scenarios:
-- **Model Not Found**: Falls back to basic configuration
-- **Token Limit Exceeded**: Automatic truncation with warnings
-- **API Errors**: Detailed error messages with context
-- **Invalid Configuration**: Parameter validation and filtering
-
-## Monitoring
-
-Track token usage and performance:
+#### Claude Models
 ```python
-result = orchestrator.run("Your problem here")
+config = HybridConfig(
+    reasoning_model_name="anthropic/claude-3.5-sonnet-20241022",
+    response_model_name="anthropic/claude-3.5-sonnet-20241022",
+    reasoning_config=ReasoningConfig(max_tokens=4000)  # Uses token limits
+)
+```
 
-if result.hybrid_result.succeeded:
-    reasoning_stats = result.hybrid_result.reasoning_call_stats
-    response_stats = result.hybrid_result.response_call_stats
-    
-    print(f"Reasoning tokens: {reasoning_stats.completion_tokens}")
-    print(f"Response tokens: {response_stats.completion_tokens}")
-    print(f"Total duration: {reasoning_stats.call_duration_seconds + response_stats.call_duration_seconds:.2f}s")
+#### Qwen Models
+```python
+config = HybridConfig(
+    reasoning_model_name="qwen/qwen3-32b",
+    response_model_name="qwen/qwen3-32b",
+    reasoning_config=ReasoningConfig(enabled=True)  # Uses /think commands automatically
+)
+```
+
+## Testing
+
+The system includes comprehensive tests for all model types:
+
+```bash
+# Test model-specific configurations
+python test_my_problem.py --test-defaults
+
+# Test token limits
+python test_my_problem.py --test-token-limits
+
+# Test Qwen prompt activation
+python test_my_problem.py --test-qwen-activation
+
+# Test token optimization
+python test_my_problem.py --test-optimization
+```
+
+## Key Benefits
+
+1. **Zero Configuration**: Works out-of-the-box with optimal settings for each model
+2. **Cost Optimization**: Streaming support reduces token usage and costs
+3. **Universal Compatibility**: Supports all major reasoning model families
+4. **Automatic Detection**: Model capabilities detected automatically
+5. **Prompt Enhancement**: Qwen models get automatic `/think` command injection
+6. **Realistic Limits**: Uses actual API constraints, not theoretical maximums
+7. **Robust Extraction**: Handles multiple reasoning token formats automatically
+
+## Important Notes
+
+### ⚠️ **Critical: Output Limits vs Context Windows**
+- **Context Window**: Total tokens the model can process (input + output)
+- **Output Limit**: Maximum tokens the model can generate (reasoning + response)
+- **Our limits are based on OUTPUT constraints, not context windows**
+- **Example**: GPT-4o has 128K context but only 16K output limit
+
+### 🔧 **Automatic Validation**
+- Token allocations are automatically validated against real API limits
+- Requests that would exceed limits are prevented before API calls
+- Graceful degradation when limits are approached
+
+### 📊 **Performance Optimization**
+- Model-specific defaults provide optimal reasoning quality
+- Conservative limits prevent API failures
+- Streaming support for real-time token processing
+
+## Configuration Reference
+
+### ReasoningConfig Parameters
+- `enabled`: Enable reasoning (default: True)
+- `effort`: Effort level for OpenAI/Grok models ("low", "medium", "high")
+- `max_tokens`: Direct token allocation for Anthropic/Gemini models
+- `exclude`: Exclude reasoning from response (default: False)
+
+### HybridConfig Parameters
+- `reasoning_model_name`: Model for reasoning phase
+- `response_model_name`: Model for response generation
+- `reasoning_config`: Custom reasoning configuration (optional)
+- `max_reasoning_tokens`: Manual override (not recommended)
+- `max_response_tokens`: Manual override (not recommended)
+
+## Troubleshooting
+
+### Common Issues
+1. **Token Limit Exceeded**: Check if custom limits exceed model constraints
+2. **Poor Reasoning Quality**: Try higher effort levels or more reasoning tokens
+3. **Truncated Responses**: Increase response token allocation
+4. **API Failures**: Ensure total tokens don't exceed output limits
+
+### Debug Mode
+```python
+# Enable debug logging
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
+# Test token limits
+config = HybridConfig(reasoning_model_name="your-model")
+limits = config.get_effective_token_limits()
+print(f"Token limits: {limits}")
 ```
 
 This ensures optimal performance while maintaining adequate token space for both reasoning and response generation across all supported models. 

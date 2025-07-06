@@ -100,6 +100,13 @@ class HybridProcessor:
             problem_description=problem_description,
             reasoning_complete_token=self.config.reasoning_complete_token
         )
+        
+        # Apply prompt-based reasoning activation for models like Qwen that use slash commands
+        reasoning_prompt = self.config.apply_prompt_based_reasoning(
+            prompt=reasoning_prompt,
+            model_name=self.config.reasoning_model_name,
+            reasoning_config=self.config.reasoning_config
+        )
 
         logger.info(f"Calling reasoning model ({self.config.reasoning_model_name}) for Hybrid process.")
         logger.debug(f"Reasoning prompt:\n{reasoning_prompt}")
