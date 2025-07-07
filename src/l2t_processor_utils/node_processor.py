@@ -8,6 +8,7 @@ from src.aot.dataclasses import LLMCallStats
 from src.l2t.dataclasses import L2TConfig, L2TGraph, L2TNode, L2TNodeCategory, L2TResult
 from src.l2t.prompt_generator import L2TPromptGenerator
 from src.l2t.response_parser import L2TResponseParser
+from src.communication_logger import log_llm_request, log_llm_response, ModelRole
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,14 @@ class NodeProcessor:
             self.l2t_config.x_eva_default, # Modified
             remaining_steps_hint
         )
+        
+        # Log the outgoing classification request
+        config_info = {"temperature": self.llm_config.temperature, "max_tokens": self.llm_config.max_tokens}
+        step_info = f"Step {current_process_step} - Classify Node {node_to_classify.id[:8]}"
+        comm_id = log_llm_request("L2T", ModelRole.L2T_CLASSIFICATION, 
+                                 self.l2t_config.classification_model_names, 
+                                 classification_prompt, step_info, config_info)
+        
         (
             classification_response_content,
             classification_stats,
@@ -76,6 +85,12 @@ class NodeProcessor:
             models=self.l2t_config.classification_model_names, # Modified
             config=self.llm_config, # Modified
         )
+        
+        # Log the incoming classification response
+        log_llm_response(comm_id, "L2T", ModelRole.L2T_CLASSIFICATION, 
+                        classification_stats.model_name, classification_response_content, 
+                        step_info, classification_stats)
+        
         self._update_result_stats(result, classification_stats)
         node_category = L2TResponseParser.parse_l2t_node_classification_response(
             classification_response_content
@@ -104,6 +119,13 @@ class NodeProcessor:
                 self.l2t_config.x_eva_default, # Modified
                 remaining_steps_hint
             )
+            
+            # Log the outgoing thought generation request
+            step_info = f"Step {current_process_step} - Generate from Node {node_to_classify.id[:8]}"
+            comm_id = log_llm_request("L2T", ModelRole.L2T_THOUGHT_GENERATION, 
+                                     self.l2t_config.thought_generation_model_names, 
+                                     thought_gen_prompt, step_info, config_info)
+            
             (
                 new_thought_response_content,
                 new_thought_stats,
@@ -112,6 +134,12 @@ class NodeProcessor:
                 models=self.l2t_config.thought_generation_model_names, # Modified
                 config=self.llm_config, # Modified
             )
+            
+            # Log the incoming thought generation response
+            log_llm_response(comm_id, "L2T", ModelRole.L2T_THOUGHT_GENERATION, 
+                            new_thought_stats.model_name, new_thought_response_content, 
+                            step_info, new_thought_stats)
+            
             self._update_result_stats(result, new_thought_stats)
             new_thought_content = L2TResponseParser.parse_l2t_thought_generation_response(
                 new_thought_response_content

@@ -17,6 +17,7 @@ from .dataclasses import (
 from .prompt_generator import L2TPromptGenerator
 from .response_parser import L2TResponseParser
 from src.l2t_processor_utils.node_processor import NodeProcessor # Moved to __init__
+from src.communication_logger import log_llm_request, log_llm_response, log_stage, ModelRole
 
 logger = logging.getLogger(__name__)
 
@@ -59,14 +60,29 @@ class L2TProcessor:
         process_start_time = time.monotonic()
         current_process_step = 0
 
+        log_stage("L2T", "Initial Thought Generation")
+        
         initial_prompt = self.prompt_generator.construct_l2t_initial_prompt(
             problem_text, self.l2t_config.x_fmt_default, self.l2t_config.x_eva_default
         )
+        
+        # Log the outgoing initial request
+        config_info = {"temperature": self.initial_thought_llm_config.temperature, "max_tokens": self.initial_thought_llm_config.max_tokens}
+        comm_id = log_llm_request("L2T", ModelRole.L2T_INITIAL_THOUGHT, 
+                                 self.l2t_config.initial_prompt_model_names, 
+                                 initial_prompt, "Initial Thought", config_info)
+        
         initial_response_content, initial_stats = self.llm_client.call(
             initial_prompt,
             models=self.l2t_config.initial_prompt_model_names,
             config=self.initial_thought_llm_config, # Use specific config for initial thought
         )
+        
+        # Log the incoming initial response
+        log_llm_response(comm_id, "L2T", ModelRole.L2T_INITIAL_THOUGHT, 
+                        initial_stats.model_name, initial_response_content, 
+                        "Initial Thought", initial_stats)
+        
         self.node_processor._update_result_stats(result, initial_stats)
 
         parsed_initial_thought = (
@@ -94,6 +110,8 @@ class L2TProcessor:
         graph.add_node(root_node, is_root=True)
         logger.info(f"Initial thought node {root_node_id} created: '{parsed_initial_thought[:100]}...'")
 
+        log_stage("L2T", "Iterative Processing")
+        
         termination_reason = None
         while (
             current_process_step < self.l2t_config.max_steps
@@ -103,9 +121,9 @@ class L2TProcessor:
             and result.final_answer is None
         ):
             current_process_step += 1
-            logger.warning(
-                f"--- L2T Process Step {current_process_step}/{self.l2t_config.max_steps} --- "
-                f"V_pres size: {len(graph.v_pres)}, Total nodes: {len(graph.nodes)} ---"
+            logger.info(
+                f"L2T Process Step {current_process_step}/{self.l2t_config.max_steps} - "
+                f"V_pres size: {len(graph.v_pres)}, Total nodes: {len(graph.nodes)}"
             )
             logger.debug(f"PROCESSOR: Start of step {current_process_step}. graph.v_pres: {list(graph.v_pres)}")
 

@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from src.llm_client import LLMClient # For type hinting only
 
 from src.llm_config import LLMConfig # Added
+from src.communication_logger import log_llm_request, log_llm_response, log_stage, ModelRole
 
 class AoTProcessor:
     def __init__(self, llm_client: 'LLMClient', runner_config: AoTRunnerConfig, llm_config: LLMConfig): # Modified
@@ -38,20 +39,27 @@ class AoTProcessor:
         logging.info(f"Max Iterations: {self.runner_config.max_steps}")
 
         # Phase 1: Generate Initial Answer
-        logging.info("--- Phase 1: Generating Initial Answer ---")
+        log_stage("AoT", "Phase 1: Initial Answer Generation")
         initial_prompt = PromptGenerator.construct_aot_initial_prompt(problem_text)
+        
+        # Log the outgoing request
+        config_info = {"temperature": self.llm_config.temperature, "max_tokens": self.llm_config.max_tokens}
+        comm_id = log_llm_request("AoT", ModelRole.AOT_MAIN, self.runner_config.main_model_names, 
+                                 initial_prompt, "Phase 1", config_info)
+        
         initial_reply, initial_stats = self.llm_client.call(
             initial_prompt, models=self.runner_config.main_model_names, config=self.llm_config
         )
+        
+        # Log the incoming response
+        log_llm_response(comm_id, "AoT", ModelRole.AOT_MAIN, initial_stats.model_name, 
+                        initial_reply, "Phase 1", initial_stats)
         
         # Update statistics
         result.total_llm_interaction_time_seconds += initial_stats.call_duration_seconds
         result.total_completion_tokens += initial_stats.completion_tokens
         result.reasoning_completion_tokens += initial_stats.completion_tokens
         result.total_prompt_tokens += initial_stats.prompt_tokens
-        
-        logging.debug(f"Initial Response from {initial_stats.model_name}:\n{initial_reply}")
-        logging.info(f"LLM call ({initial_stats.model_name}): Duration: {initial_stats.call_duration_seconds:.2f}s, Tokens (C:{initial_stats.completion_tokens}, P:{initial_stats.prompt_tokens})")
         
         if initial_reply.startswith("Error:"):
             logging.critical(f"LLM call failed for initial answer. Error: {initial_reply}")
@@ -79,6 +87,8 @@ class AoTProcessor:
         iteration = 1
         max_iterations = self.runner_config.max_steps
         
+        log_stage("AoT", "Phase 2: Iterative Reflection and Refinement")
+        
         while iteration <= max_iterations:
             elapsed_time = time.monotonic() - process_start_time
             
@@ -93,23 +103,27 @@ class AoTProcessor:
                 logging.info(f"Token limit ({self.runner_config.max_reasoning_tokens}) reached. Stopping iterations.")
                 break
             
-            logging.info(f"--- Iteration {iteration}/{max_iterations} ---")
-            
             # Sub-phase 2a: Reflection
-            logging.info(f"--- Reflection Phase {iteration} ---")
+            step_info = f"Iteration {iteration}/{max_iterations} - Reflection"
             reflection_prompt = PromptGenerator.construct_aot_reflection_prompt(problem_text, result.full_history_for_context)
+            
+            # Log the outgoing reflection request
+            comm_id = log_llm_request("AoT", ModelRole.AOT_MAIN, self.runner_config.main_model_names, 
+                                     reflection_prompt, step_info, config_info)
+            
             reflection_reply, reflection_stats = self.llm_client.call(
                 reflection_prompt, models=self.runner_config.main_model_names, config=self.llm_config
             )
+            
+            # Log the incoming reflection response
+            log_llm_response(comm_id, "AoT", ModelRole.AOT_MAIN, reflection_stats.model_name, 
+                            reflection_reply, step_info, reflection_stats)
             
             # Update statistics
             result.total_llm_interaction_time_seconds += reflection_stats.call_duration_seconds
             result.total_completion_tokens += reflection_stats.completion_tokens
             result.reasoning_completion_tokens += reflection_stats.completion_tokens
             result.total_prompt_tokens += reflection_stats.prompt_tokens
-            
-            logging.debug(f"Reflection Response from {reflection_stats.model_name}:\n{reflection_reply}")
-            logging.info(f"LLM call ({reflection_stats.model_name}): Duration: {reflection_stats.call_duration_seconds:.2f}s, Tokens (C:{reflection_stats.completion_tokens}, P:{reflection_stats.prompt_tokens})")
             
             if reflection_reply.startswith("Error:"):
                 logging.warning(f"Reflection failed for iteration {iteration}: {reflection_reply}")
@@ -130,20 +144,26 @@ class AoTProcessor:
                 logging.warning(f"No structured reflection found for iteration {iteration}, using full response")
             
             # Sub-phase 2b: Refinement
-            logging.info(f"--- Refinement Phase {iteration} ---")
+            step_info = f"Iteration {iteration}/{max_iterations} - Refinement"
             refinement_prompt = PromptGenerator.construct_aot_refinement_prompt(problem_text, result.full_history_for_context)
+            
+            # Log the outgoing refinement request
+            comm_id = log_llm_request("AoT", ModelRole.AOT_MAIN, self.runner_config.main_model_names, 
+                                     refinement_prompt, step_info, config_info)
+            
             refinement_reply, refinement_stats = self.llm_client.call(
                 refinement_prompt, models=self.runner_config.main_model_names, config=self.llm_config
             )
+            
+            # Log the incoming refinement response
+            log_llm_response(comm_id, "AoT", ModelRole.AOT_MAIN, refinement_stats.model_name, 
+                            refinement_reply, step_info, refinement_stats)
             
             # Update statistics
             result.total_llm_interaction_time_seconds += refinement_stats.call_duration_seconds
             result.total_completion_tokens += refinement_stats.completion_tokens
             result.reasoning_completion_tokens += refinement_stats.completion_tokens
             result.total_prompt_tokens += refinement_stats.prompt_tokens
-            
-            logging.debug(f"Refinement Response from {refinement_stats.model_name}:\n{refinement_reply}")
-            logging.info(f"LLM call ({refinement_stats.model_name}): Duration: {refinement_stats.call_duration_seconds:.2f}s, Tokens (C:{refinement_stats.completion_tokens}, P:{refinement_stats.prompt_tokens})")
             
             if refinement_reply.startswith("Error:"):
                 logging.warning(f"Refinement failed for iteration {iteration}: {refinement_reply}")
@@ -178,7 +198,7 @@ class AoTProcessor:
         
         # Phase 3: Generate Final Answer
         if not result.final_answer:
-            logging.info("--- Phase 3: Generating Final Answer ---")
+            log_stage("AoT", "Phase 3: Final Answer Generation")
             elapsed_time = time.monotonic() - process_start_time
             can_make_final_call = True
             
@@ -195,16 +215,22 @@ class AoTProcessor:
             
             if can_make_final_call:
                 final_prompt = PromptGenerator.construct_aot_final_prompt(problem_text, result.full_history_for_context)
+                
+                # Log the outgoing final request
+                comm_id = log_llm_request("AoT", ModelRole.AOT_MAIN, self.runner_config.main_model_names, 
+                                         final_prompt, "Phase 3", config_info)
+                
                 final_reply, final_stats = self.llm_client.call(
                     final_prompt, models=self.runner_config.main_model_names, config=self.llm_config
                 )
                 
+                # Log the incoming final response
+                log_llm_response(comm_id, "AoT", ModelRole.AOT_MAIN, final_stats.model_name, 
+                                final_reply, "Phase 3", final_stats)
+                
                 result.total_llm_interaction_time_seconds += final_stats.call_duration_seconds
                 result.total_completion_tokens += final_stats.completion_tokens
                 result.total_prompt_tokens += final_stats.prompt_tokens
-                
-                logging.debug(f"Final Response from {final_stats.model_name}:\n{final_reply}")
-                logging.info(f"LLM call ({final_stats.model_name}): Duration: {final_stats.call_duration_seconds:.2f}s, Tokens (C:{final_stats.completion_tokens}, P:{final_stats.prompt_tokens})")
                 
                 if not final_reply.startswith("Error:"):
                     parsed_final = ResponseParser.parse_llm_output(final_reply)

@@ -16,6 +16,7 @@ from .dataclasses import (
 )
 from .prompt_generator import GoTPromptGenerator
 from .response_parser import GoTResponseParser
+from src.communication_logger import log_llm_request, log_llm_response, log_stage, ModelRole
 
 # Configure logging if not already configured
 if not logging.getLogger().hasHandlers():
@@ -45,12 +46,25 @@ class GoTProcessor: # Removed ReasoningProcess from inheritance
         # If stats is None, it means an error likely occurred before or during the call,
         # or the LLMClient didn't return stats. This is logged in _call_llm.
 
-    def _call_llm(self, prompt: str, models: List[str], llm_config_type: str) -> Tuple[str, Optional[LLMCallStats]]:
+    def _call_llm(self, prompt: str, models: List[str], llm_config_type: str, step_info: Optional[str] = None) -> Tuple[str, Optional[LLMCallStats]]:
         selected_llm_config = getattr(self.model_configs, f"{llm_config_type}_config", None)
         if not selected_llm_config:
             err_msg = f"Error: Invalid LLM configuration type '{llm_config_type}'"
             logger.error(err_msg)
             return err_msg, None
+
+        # Map config types to model roles
+        role_mapping = {
+            "thought_generation": ModelRole.GOT_THOUGHT_GENERATION,
+            "scoring": ModelRole.GOT_SCORING,
+            "aggregation": ModelRole.GOT_AGGREGATION,
+            "refinement": ModelRole.GOT_REFINEMENT
+        }
+        model_role = role_mapping.get(llm_config_type, ModelRole.GOT_THOUGHT_GENERATION)
+
+        # Log the outgoing request
+        config_info = {"temperature": selected_llm_config.temperature, "max_tokens": selected_llm_config.max_tokens}
+        comm_id = log_llm_request("GoT", model_role, models, prompt, step_info, config_info)
 
         response_content, stats = self.llm_client.call(
             prompt=prompt,
@@ -58,27 +72,22 @@ class GoTProcessor: # Removed ReasoningProcess from inheritance
             config=selected_llm_config
         )
 
+        # Log the incoming response
         if stats:
-            logger.info(f"LLM Call ({stats.model_name}, type: {llm_config_type}): "
-                        f"Duration: {stats.call_duration_seconds:.2f}s, "
-                        f"Tokens (C:{stats.completion_tokens}, P:{stats.prompt_tokens})")
+            log_llm_response(comm_id, "GoT", model_role, stats.model_name, 
+                            response_content, step_info, stats)
         else:
             # This case implies an issue with the LLMClient call itself if stats are missing without an error in response_content
-            logger.error(f"LLM Call (type: {llm_config_type}) did not return stats. Response content: '{response_content[:100]}...'")
-            if not response_content.startswith("Error:"):
-                 # This might indicate a silent failure or an unexpected response from the LLM/client
-                 # To be safe, prepend an error if one isn't already there.
-                 # However, llm_client.call should ideally return an error in response_content if the call itself failed.
-                 pass # Assuming llm_client.call handles its own errors in response_content
+            log_llm_response(comm_id, "GoT", model_role, "unknown", 
+                            response_content, step_info, None, error="No stats returned from LLM call")
 
         return response_content, stats
 
     def _generate_initial_thoughts(self, problem_description: str, graph: GoTGraph, result: GoTResult) -> None:
-        logger.info("Generating initial thoughts...")
         prompt = self.prompt_generator.construct_initial_thought_prompt(problem_description)
 
         response_content, stats = self._call_llm(
-            prompt, self.config.thought_generation_model_names, "thought_generation"
+            prompt, self.config.thought_generation_model_names, "thought_generation", "Initial Generation"
         )
         self._update_result_stats(result, stats)
 
@@ -116,12 +125,12 @@ class GoTProcessor: # Removed ReasoningProcess from inheritance
             logger.debug(f"Thought {parent_thought.id} already has max children ({len(parent_thought.children_ids)}/{self.config.max_children_per_thought}). Skipping expansion.")
             return
 
-        logger.info(f"Expanding thought {parent_thought.id}: {parent_thought.content[:100]}...")
         prompt = self.prompt_generator.construct_expand_thought_prompt(
             problem_description, parent_thought, allowed_new_children
         )
+        step_info = f"Step {current_step} - Expand {parent_thought.id[:8]}"
         response_content, stats = self._call_llm(
-            prompt, self.config.thought_generation_model_names, "thought_generation"
+            prompt, self.config.thought_generation_model_names, "thought_generation", step_info
         )
         self._update_result_stats(result, stats)
 
@@ -156,7 +165,6 @@ class GoTProcessor: # Removed ReasoningProcess from inheritance
         if not self.config.enable_aggregation or not thoughts_to_aggregate or len(thoughts_to_aggregate) < 2:
             return None
 
-        logger.info(f"Aggregating {len(thoughts_to_aggregate)} thoughts...")
         # Filter out thoughts not in graph just in case list is stale, though unlikely with current flow
         valid_thoughts_to_aggregate = [t for t in thoughts_to_aggregate if t.id in graph.thoughts]
         if len(valid_thoughts_to_aggregate) < 2 : return None
@@ -166,8 +174,9 @@ class GoTProcessor: # Removed ReasoningProcess from inheritance
         prompt = self.prompt_generator.construct_aggregate_thoughts_prompt(
             problem_description, valid_thoughts_to_aggregate[:self.config.max_parents_for_aggregation]
         )
+        step_info = f"Step {current_step} - Aggregate {len(valid_thoughts_to_aggregate)} thoughts"
         response_content, stats = self._call_llm(
-            prompt, self.config.aggregation_model_names, "aggregation"
+            prompt, self.config.aggregation_model_names, "aggregation", step_info
         )
         self._update_result_stats(result, stats)
 
@@ -207,11 +216,11 @@ class GoTProcessor: # Removed ReasoningProcess from inheritance
         if not self.config.enable_refinement:
             return None
 
-        logger.info(f"Refining thought {thought_to_refine.id}: {thought_to_refine.content[:100]}...")
         prompt = self.prompt_generator.construct_refine_thought_prompt(problem_description, thought_to_refine)
 
+        step_info = f"Step {current_step} - Refine {thought_to_refine.id[:8]}"
         response_content, stats = self._call_llm(
-            prompt, self.config.refinement_model_names, "refinement"
+            prompt, self.config.refinement_model_names, "refinement", step_info
         )
         self._update_result_stats(result, stats)
 

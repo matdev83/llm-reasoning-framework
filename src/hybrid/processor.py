@@ -7,6 +7,7 @@ from src.llm_client import LLMClient
 from src.llm_config import LLMConfig
 from src.hybrid.dataclasses import HybridConfig, HybridResult, LLMCallStats
 from src.hybrid.reasoning_extractor import ReasoningExtractor, ReasoningFormat
+from src.communication_logger import log_llm_request, log_llm_response, log_stage, ModelRole
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +150,8 @@ class HybridProcessor:
         result = HybridResult()
 
         # Stage 1: Call Reasoning Model
+        log_stage("Hybrid", "Stage 1: Reasoning Model")
+        
         reasoning_prompt = self.config.reasoning_prompt_template.format(
             problem_description=problem_description,
             reasoning_complete_token=self.config.reasoning_complete_token
@@ -160,9 +163,6 @@ class HybridProcessor:
             model_name=self.config.reasoning_model_name,
             reasoning_config=self.config.reasoning_config
         )
-
-        logger.info(f"Calling reasoning model ({self.config.reasoning_model_name}) for Hybrid process.")
-        logger.debug(f"Reasoning prompt:\n{reasoning_prompt}")
 
         try:
             # Prepare reasoning configuration with model-specific filtering
@@ -197,8 +197,15 @@ class HybridProcessor:
                 stop=stop_sequence
             )
             
-            logger.debug(f"Using streaming: {self.config.use_streaming}")
-            logger.debug(f"Model headers: {model_headers}")
+            # Log the outgoing reasoning request
+            config_info = {
+                "temperature": self.config.reasoning_model_temperature,
+                "max_tokens": token_limits["max_reasoning_tokens"],
+                "streaming": self.config.use_streaming
+            }
+            comm_id = log_llm_request("Hybrid", ModelRole.HYBRID_REASONING, 
+                                     [self.config.reasoning_model_name], 
+                                     reasoning_prompt, "Stage 1", config_info)
             
             # Call the reasoning model with new enhanced method
             call_result = self.llm_client.call_with_reasoning(
@@ -228,9 +235,11 @@ class HybridProcessor:
                 raise ValueError("Unexpected return value from llm_client.call_with_reasoning")
             
             result.reasoning_call_stats = reasoning_stats
-            logger.info(f"Reasoning model ({reasoning_stats.model_name}) call successful. Duration: {reasoning_stats.call_duration_seconds:.2f}s")
-            logger.debug(f"Raw reasoning output:\n{raw_reasoning_output}")
-            logger.debug(f"API extracted reasoning:\n{extracted_reasoning_from_api}")
+            
+            # Log the incoming reasoning response
+            log_llm_response(comm_id, "Hybrid", ModelRole.HYBRID_REASONING, 
+                            reasoning_stats.model_name, raw_reasoning_output, 
+                            "Stage 1", reasoning_stats)
 
             # Check if the raw output is actually an error message
             if raw_reasoning_output and self._is_error_message(raw_reasoning_output):
@@ -285,13 +294,12 @@ class HybridProcessor:
                 logger.debug(f"Truncated reasoning:\n{result.extracted_reasoning}")
 
         # Stage 2: Call Response Model
+        log_stage("Hybrid", "Stage 2: Response Model")
+        
         response_prompt = self.config.response_prompt_template.format(
             problem_description=problem_description,
             extracted_reasoning=result.extracted_reasoning
         )
-
-        logger.info(f"Calling response model ({self.config.response_model_name}) for Hybrid process.")
-        logger.debug(f"Response prompt:\n{response_prompt}")
 
         try:
             # Get model-specific headers for response model
@@ -303,6 +311,15 @@ class HybridProcessor:
                 max_tokens=token_limits["max_response_tokens"]
             )
             
+            # Log the outgoing response request
+            config_info = {
+                "temperature": self.config.response_model_temperature,
+                "max_tokens": token_limits["max_response_tokens"]
+            }
+            comm_id = log_llm_request("Hybrid", ModelRole.HYBRID_RESPONSE, 
+                                     [self.config.response_model_name], 
+                                     response_prompt, "Stage 2", config_info)
+            
             # Use legacy call method for response model (no reasoning needed)
             final_answer_output, response_stats = self.llm_client.call(
                 prompt=response_prompt,
@@ -310,8 +327,11 @@ class HybridProcessor:
                 config=response_config
             )
             result.response_call_stats = response_stats
-            logger.info(f"Response model ({response_stats.model_name}) call successful. Duration: {response_stats.call_duration_seconds:.2f}s")
-            logger.debug(f"Raw response output:\n{final_answer_output}")
+            
+            # Log the incoming response response
+            log_llm_response(comm_id, "Hybrid", ModelRole.HYBRID_RESPONSE, 
+                            response_stats.model_name, final_answer_output, 
+                            "Stage 2", response_stats)
 
         except Exception as e:
             logger.error(f"Error during response model call: {e}")

@@ -11,6 +11,7 @@ from src.llm_config import LLMConfig
 from src.complexity_assessor import ComplexityAssessor
 from .processor import AoTProcessor
 from src.heuristic_detector import HeuristicDetector
+from src.communication_logger import log_llm_request, log_llm_response, log_stage, log_summary, ModelRole
 
 logger = logging.getLogger(__name__) # Named logger
 
@@ -44,14 +45,23 @@ class AoTProcess(ReasoningProcess):
 
     def _run_direct_oneshot(self, problem_text: str, is_fallback:bool = False) -> Tuple[str, LLMCallStats]:
         mode = "FALLBACK ONESHOT (AoTProcess)" if is_fallback else "ONESHOT (AoTProcess)"
-        logger.info(f"--- Proceeding with {mode} Answer ---") # Use logger
-        logger.info(f"Using models: {', '.join(self.aot_config.main_model_names)}, LLMConfig: {self.direct_oneshot_llm_config}") # Use logger
+        stage_name = "Fallback One-Shot" if is_fallback else "Direct One-Shot"
+        log_stage("AoT", stage_name)
+        
+        # Log the outgoing request
+        config_info = {"temperature": self.direct_oneshot_llm_config.temperature, "max_tokens": self.direct_oneshot_llm_config.max_tokens}
+        model_role = ModelRole.AOT_ONESHOT
+        comm_id = log_llm_request("AoT", model_role, self.aot_config.main_model_names, 
+                                 problem_text, stage_name, config_info)
 
         response_content, stats = self.llm_client.call(
             prompt=problem_text, models=self.aot_config.main_model_names, config=self.direct_oneshot_llm_config
         )
-        logger.debug(f"Direct {mode} response from {stats.model_name}:\n{response_content}") # Use logger
-        logger.info(f"LLM call ({stats.model_name}) for {mode}: Duration: {stats.call_duration_seconds:.2f}s, Tokens (C:{stats.completion_tokens}, P:{stats.prompt_tokens})") # Use logger
+        
+        # Log the incoming response
+        log_llm_response(comm_id, "AoT", model_role, stats.model_name, 
+                        response_content, stage_name, stats)
+        
         return response_content, stats
 
     def execute(self, problem_description: str, model_name: str, *args, **kwargs) -> None:
