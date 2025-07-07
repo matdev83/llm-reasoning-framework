@@ -44,6 +44,13 @@ class ModelRole(Enum):
     GOT_ASSESSMENT = "got_assessment"
     GOT_ONESHOT = "got_oneshot"
     
+    # FaR roles
+    FAR_FACT_EXTRACTION = "far_fact_extraction"
+    FAR_REFLECTION_ANSWER = "far_reflection_answer"
+    FAR_ASSESSMENT = "far_assessment"
+    FAR_ONESHOT = "far_oneshot"
+    FAR_ONESHOT_FALLBACK = "far_oneshot_fallback"
+    
     # General roles
     COMPLEXITY_ASSESSMENT = "complexity_assessment"
     ONESHOT_FALLBACK = "oneshot_fallback"

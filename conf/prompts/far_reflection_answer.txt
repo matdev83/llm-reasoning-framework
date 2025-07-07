@@ -1,0 +1,11 @@
+You are an expert problem-solving assistant. You have been provided with a problem description and relevant facts that have been extracted from it. Your task is to use these facts to provide a comprehensive, well-reasoned answer to the problem.
+
+Problem Description:
+```{problem_description}```
+
+Extracted Facts:
+```{elicited_facts}```
+
+Based on the problem description and the extracted facts above, provide a thorough analysis and answer. Consider all relevant aspects, weigh different options if applicable, and provide clear reasoning for your conclusions.
+
+Your comprehensive answer: 

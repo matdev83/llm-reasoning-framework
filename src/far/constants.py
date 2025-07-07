@@ -1,10 +1,8 @@
 # Default model names for FaR
-DEFAULT_FAR_FACT_MODEL_NAMES = ["perplexity/sonar-small-online"]
-# Using deepseek/deepseek-chat as r1-0528:free is not on OpenRouter based on current info
-# For user's specific request: perplexity/sonar, deepseek/deepseek-r1-0528:free
-# The CLI runner will allow overriding these defaults.
-REQUESTED_FAR_FACT_MODEL_NAMES = ["perplexity/sonar-small-online"] # Defaulting to available sonar
-REQUESTED_FAR_MAIN_MODEL_NAMES = ["deepseek/deepseek-chat"] # Defaulting to available deepseek
+DEFAULT_FAR_FACT_MODEL_NAMES = ["openrouter/cypher-alpha:free"]
+# Using openrouter/cypher-alpha:free as it's confirmed working
+REQUESTED_FAR_FACT_MODEL_NAMES = ["openrouter/cypher-alpha:free"]
+REQUESTED_FAR_MAIN_MODEL_NAMES = ["openrouter/cypher-alpha:free"]
 
 # Default temperatures
 DEFAULT_FAR_FACT_TEMPERATURE = 0.3
@@ -18,5 +16,5 @@ DEFAULT_FAR_MAX_MAIN_TOKENS = 2000
 
 # Default models for assessment and orchestrator's one-shot (can reuse AoT/general defaults)
 # These are often smaller/cheaper or general purpose models.
-DEFAULT_FAR_ASSESSMENT_MODEL_NAMES = ["openai/gpt-3.5-turbo"] # Example, align with other assessors
-DEFAULT_FAR_ONESHOT_MODEL_NAMES = ["openai/gpt-3.5-turbo"]    # Example, align with other one-shot fallbacks
+DEFAULT_FAR_ASSESSMENT_MODEL_NAMES = ["openrouter/cypher-alpha:free"]
+DEFAULT_FAR_ONESHOT_MODEL_NAMES = ["openrouter/cypher-alpha:free"]
