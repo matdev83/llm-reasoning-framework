@@ -89,6 +89,17 @@ Modules specifically designed for the Hybrid reasoning strategy.
 * `dataclasses.py`: Contains data classes for structuring Hybrid-specific data.
 * `enums.py`: Defines enumerations relevant to the Hybrid process.
 
+### `src/far/` - Fact-and-Reflection (FaR) Implementation
+
+Modules specifically designed for the Fact-and-Reflection reasoning strategy.
+
+* `__init__.py`: Initializes the `far` package.
+* `orchestrator.py`: Orchestrates the overall FaR problem-solving flow, managing assessment and fallback mechanisms.
+* `processor.py`: Implements the two-stage FaR process with fact elicitation and reflection phases.
+* `constants.py`: Defines constants used within the FaR implementation.
+* `dataclasses.py`: Contains data classes for structuring FaR-specific data.
+* `enums.py`: Defines enumerations relevant to the FaR process.
+
 ### `src/heuristic_detector/` - Local Heuristic Analysis
 
 Modules for performing local, deterministic heuristic analysis to quickly assess problem complexity without an LLM call.
@@ -109,6 +120,8 @@ This directory holds various configuration files and prompt templates.
   * `l2t_initial.txt`: Initial prompt for the L2T process.
   * `l2t_node_classification.txt`: Prompt for classifying nodes in the L2T graph.
   * `l2t_thought_generation.txt`: Prompt for generating new thoughts/nodes in the L2T graph.
+  * `far_fact_elicitation.txt`: Prompt for extracting facts in the FaR process.
+  * `far_reflection_answer.txt`: Prompt for generating reflected answers in the FaR process.
 * `conf/tests/`: Contains configuration and prompts specifically used for testing purposes, particularly for heuristic evaluation.
   * `prompts/example_user_prompts/`: Provides example problem statements for testing and demonstration.
     * `problem1.txt`, `problem2.txt`.
@@ -136,6 +149,9 @@ This directory contains the project's test suite, organized to mirror the `src/`
 * `__init__.py`: Initializes the `tests` package.
 * `aot/`: Tests for the AoT implementation.
   * `test_orchestrator.py`: Tests for the AoT orchestrator.
+* `far/`: Tests for the FaR implementation.
+  * `test_orchestrator.py`: Tests for the FaR orchestrator.
+  * `test_processor.py`: Tests for the FaR processor.
 * `l2t/`: Tests for the L2T implementation.
   * `test_l2t_orchestrator.py`: Tests for the L2T orchestrator.
   * `test_processor.py`: Tests for the L2T processor.
@@ -147,6 +163,8 @@ This directory contains the project's test suite, organized to mirror the `src/`
   * `test_initial_thought_generation_failure_parsing.py`: Tests error handling during initial thought generation due to parsing issues.
   * `test_max_steps_reached.py`: Tests behavior when the maximum number of steps is reached.
   * `test_successful_path_with_final_answer.py`: Tests a successful reasoning path culminating in a final answer.
+* `integration/`: Contains integration tests for the framework components.
+  * `test_far_integration.py`: Integration tests for the FaR reasoning process.
 * `test_heuristic_detector.py`: Tests for the local heuristic analysis.
 * `test_llm_accounting.py`: Tests for the integration with the `llm-accounting` library.
 * `test_llm_config.py`: Tests for the LLM configuration management.
@@ -168,7 +186,7 @@ LLM agents are expected to interact with various parts of this framework. Key ar
 * **`src/cli_runner.py`**: The primary entry point for executing the framework. Agents can analyze this to understand how different reasoning processes are initiated and controlled.
 * **`src/llm_client.py`**: Manages all LLM interactions. Agents can inspect this module to understand API call patterns, error handling, and response structures.
 * **`src/complexity_assessor.py` and `src/heuristic_detector/`**: These modules are crucial for understanding how the framework determines problem complexity and selects reasoning strategies. Agents can analyze these to improve their own problem assessment capabilities.
-* **`src/aot/`, `src/l2t/`, `src/hybrid/`**: These directories contain the core implementations of different reasoning strategies. Agents working on specific reasoning processes should focus on these modules.
+* **`src/aot/`, `src/l2t/`, `src/hybrid/`, `src/far/`**: These directories contain the core implementations of different reasoning strategies. Agents working on specific reasoning processes should focus on these modules.
 * **`conf/prompts/`**: This directory is vital for understanding the prompts used by the LLMs. Agents can analyze and suggest improvements to these prompts to enhance reasoning performance.
 * **`tests/`**: Agents should leverage the test suite to understand expected behavior, write new tests for new features, or debug existing functionalities.
 

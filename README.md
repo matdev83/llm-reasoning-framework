@@ -2,7 +2,16 @@
 
 This project provides a flexible and modular framework for orchestrating diverse Large Language Model (LLM) reasoning strategies. It enables the breakdown of complex tasks into manageable steps, manages LLM interactions, and dynamically adapts problem-solving approaches based on complexity and resource constraints.
 
-This framework is designed to support various iterative and adaptive reasoning patterns, including Answer On Thought (AoT), Learn to Think (L2T), Graph of Thoughts (GoT), a novel Hybrid approach, and Fact-and-Reflection (FaR). AoT is an iterative step-by-step reasoning process that breaks down complex problems into manageable sequential steps, with each step building upon previous ones and maintaining a current answer state. L2T focuses on generating and classifying thoughts to build a reasoning graph. GoT creates a graph-based exploration of thoughts with scoring and refinement capabilities. The Hybrid approach separates reasoning from response generation using specialized models for each stage. FaR first elicits relevant facts using one model and then uses these facts along with the original problem to generate a reflected answer with another model.
+This framework is designed to support various iterative and adaptive reasoning patterns, including Answer On Thought (AoT), Learn to Think (L2T), Graph of Thoughts (GoT), a novel Hybrid approach, and Fact-and-Reflection (FaR). 
+
+**Academic Foundations:**
+- **Answer on Thought (AoT)**: Based on "Answer on Thought: Enhancing LLM Reasoning Through Iterative Answer Generation" by Ding et al. (2024) - arXiv:2412.11021
+- **Learn to Think (L2T)**: Based on "Learn to Think: Bootstrapping LLM Reasoning Capability Through Graph Representation Learning" by Zhang et al. (2024) - arXiv:2412.11940  
+- **Graph of Thoughts (GoT)**: Based on "Graph of Thoughts: Solving Elaborate Problems with Large Language Models" by Besta et al. (2023) - arXiv:2308.09687
+- **Fact-and-Reflection (FaR)**: Based on "Fact-and-Reflection (FaR) Improves Confidence Calibration of Large Language Models" by Tian et al. (2023) - arXiv:2402.17124
+- **Hybrid Thinking**: A novel approach developed specifically for this framework that separates reasoning from response generation using specialized models for each stage.
+
+AoT is an iterative step-by-step reasoning process that breaks down complex problems into manageable sequential steps, with each step building upon previous ones and maintaining a current answer state. L2T focuses on generating and classifying thoughts to build a reasoning graph. GoT creates a graph-based exploration of thoughts with scoring and refinement capabilities. The Hybrid approach separates reasoning from response generation using specialized models for each stage. FaR first elicits relevant facts using one model and then uses these facts along with the original problem to generate a reflected answer with another model.
 
 ## Key Features & Flows
 
@@ -78,7 +87,10 @@ python -m src.cli_runner --processing-mode got-always --problem "Solve this comp
 python -m src.cli_runner --processing-mode got-direct --problem "Analyze this multi-faceted problem from different angles." --got-thought-gen-models "openai/gpt-4o" --got-scoring-models "openai/gpt-4o-mini"
 
 # Example: Run FaR (Fact-and-Reflection) reasoning process
-python -m src.cli_runner --processing-mode far-always --problem "What were the key events of the French Revolution and their significance?" --far-fact-models "perplexity/sonar-small-online" --far-main-models "deepseek/deepseek-chat"
+python -m src.cli_runner --processing-mode far-always --problem "What were the key events of the French Revolution and their significance?"
+
+# Example: Directly run FaRProcessor
+python -m src.cli_runner --processing-mode far-direct --problem "Describe the process of photosynthesis and its importance." --far-fact-models "openrouter/cypher-alpha:free" --far-main-models "openrouter/cypher-alpha:free"
 ```
 
 ### AoT (Answer On Thought) Reasoning Process
@@ -189,11 +201,11 @@ Here are the available command-line arguments:
 #### FaR Process Specific Parameters
 
 *   **`--far-fact-models`**: Space-separated list of LLM(s) for FaR fact elicitation.
-    *   Default: `perplexity/sonar-small-online` (as per `REQUESTED_FAR_FACT_MODEL_NAMES` in constants)
+    *   Default: `openrouter/cypher-alpha:free`
 *   **`--far-fact-temp`**: Temperature for FaR fact LLM(s).
     *   Default: `0.3`
 *   **`--far-main-models`**: Space-separated list of main LLM(s) for FaR reflection and answer generation.
-    *   Default: `deepseek/deepseek-chat` (as per `REQUESTED_FAR_MAIN_MODEL_NAMES` in constants)
+    *   Default: `openrouter/cypher-alpha:free`
 *   **`--far-main-temp`**: Temperature for FaR main LLM(s).
     *   Default: `0.7`
 *   **`--far-max-fact-tokens`**: Max tokens for FaR fact elicitation stage.
@@ -201,11 +213,11 @@ Here are the available command-line arguments:
 *   **`--far-max-main-tokens`**: Max tokens for FaR main response stage.
     *   Default: `2000`
 *   **`--far-assess-models`**: Assessment LLM(s) for FaR (if `far-assess-first` is used).
-    *   Default: `openai/gpt-3.5-turbo`
+    *   Default: `openrouter/cypher-alpha:free`
 *   **`--far-assess-temp`**: Temperature for FaR assessment LLM(s).
     *   Default: `0.3`
 *   **`--far-oneshot-models`**: Fallback/direct one-shot LLM(s) used by FaR Orchestrator.
-    *   Default: `openai/gpt-3.5-turbo`
+    *   Default: `openrouter/cypher-alpha:free`
 *   **`--far-oneshot-temp`**: Temperature for FaR Orchestrator's one-shot calls.
     *   Default: `0.7`
 *   **`--far-disable-heuristic`**: Flag to disable the local heuristic analysis for FaR complexity assessment when using `far-assess-first`.
