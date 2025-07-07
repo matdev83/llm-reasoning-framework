@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test runner script for the LLM AOT Process project.
+Test runner script for the LLM Reasoning Framework project.
 
 This script provides convenient ways to run different types of tests:
 - Unit tests (default)
@@ -35,7 +35,7 @@ def run_command(cmd, description=""):
     return result.returncode == 0
 
 def main():
-    parser = argparse.ArgumentParser(description="Run tests for LLM AOT Process project")
+    parser = argparse.ArgumentParser(description="Run tests for LLM Reasoning Framework project")
     parser.add_argument("--integration", action="store_true", 
                        help="Run integration tests (requires OPENROUTER_API_KEY)")
     parser.add_argument("--all", action="store_true",

@@ -3,13 +3,13 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "llm-aot-process"
+name = "llm-reasoning-framework"
 version = "0.1.0"
-description = "A project for LLM AOT processing"
+description = "A comprehensive framework for LLM reasoning processes"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {file = "LICENSE"}
-keywords = ["llm", "aot", "process"]
+keywords = ["llm", "reasoning", "framework", "aot", "l2t", "got"]
 authors = [
   {name = "Mateusz", email = "matdev83@github.com"},
 ]
@@ -26,5 +26,5 @@ dependencies = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/matdev83/llm-aot-process"
-"Bug Tracker" = "https://github.com/matdev83/llm-aot-process/issues"
+    "Homepage" = "https://github.com/matdev83/llm-reasoning-framework"
+    "Bug Tracker" = "https://github.com/matdev83/llm-reasoning-framework/issues"

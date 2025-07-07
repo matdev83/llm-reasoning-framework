@@ -11,4 +11,4 @@ MIN_PREDICTED_STEP_TOKENS_FALLBACK = 10
 MIN_PREDICTED_STEP_DURATION_FALLBACK = 1.0 # seconds
 
 HTTP_REFERER = "http://localhost"
-APP_TITLE = "llm-aot-process"
+APP_TITLE = "llm-reasoning-framework"

@@ -191,8 +191,8 @@ To set up a development environment:
 
 1.  Clone the repository:
     ```bash
-    git clone https://github.com/matdev83/llm-aot-process.git
-    cd llm-aot-process
+    git clone https://github.com/matdev83/llm-reasoning-framework.git
+    cd llm-reasoning-framework
     ```
 2.  Create and activate a virtual environment:
     ```bash
