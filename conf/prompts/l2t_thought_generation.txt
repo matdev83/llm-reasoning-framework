@@ -7,5 +7,8 @@ Format constraints for your new thought: {{x_fmt}}
 Evaluation criteria for your new thought: {{x_eva}}
 
 Generate the next single thought that logically follows from the parent thought, adhering to the given constraints and criteria.
+
+IMPORTANT: If you have enough information to provide a definitive answer or conclusion to the original problem, do so. Don't continue analysis indefinitely - aim to reach a concrete conclusion when possible.
+
 Your new thought:
 {{remaining_steps_hint}}

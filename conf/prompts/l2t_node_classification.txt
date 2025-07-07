@@ -6,10 +6,31 @@ Thought to classify: "{{node_to_classify_content}}"
 Evaluation criteria for thoughts: {{x_eva}}
 
 Based on the context and evaluation criteria, classify this thought. Choose one of the following categories:
-- CONTINUE: Further reasoning should proceed from this thought.
-- TERMINATE_BRANCH: This line of reasoning should not be pursued further.
-- FINAL_ANSWER: This thought represents the final solution to the problem.
-- BACKTRACK: Reasoning should backtrack and continue from a previous thought (e.g., parent or ancestor).
+
+- CONTINUE: Further reasoning should proceed from this thought. Use this when:
+  * The thought identifies a step in the reasoning process but doesn't provide a complete solution
+  * The thought asks a question that needs to be answered
+  * The thought sets up analysis that needs to be completed
+  * The thought is incomplete or requires elaboration
+
+- TERMINATE_BRANCH: This line of reasoning should not be pursued further. Use this when:
+  * The thought leads to a dead end or contradiction
+  * The thought is irrelevant to solving the problem
+  * The thought repeats previous reasoning without adding value
+  * The thought is clearly incorrect or misleading
+
+- FINAL_ANSWER: This thought represents the final solution to the problem. Use this when:
+  * The thought provides a complete, definitive answer to the original question
+  * The thought concludes the reasoning process with a clear decision or solution
+  * The thought directly addresses what was asked in the problem statement
+  * The thought contains sufficient justification for the conclusion reached
+
+- BACKTRACK: Reasoning should backtrack and continue from a previous thought. Use this when:
+  * The current reasoning path has become unproductive
+  * A previous assumption needs to be reconsidered
+  * An alternative approach should be explored from an earlier point
+
+IMPORTANT: If the thought directly answers the original problem question or provides a clear final decision/conclusion, classify it as FINAL_ANSWER. Don't continue reasoning indefinitely if a solution has been reached.
 
 Your classification (must be one of the exact category names CONTINUE, TERMINATE_BRANCH, FINAL_ANSWER, BACKTRACK):
 {{remaining_steps_hint}}

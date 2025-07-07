@@ -96,15 +96,49 @@ class NodeProcessor:
             classification_response_content
         )
 
-        if classification_response_content.startswith("Error:") or node_category is None:
+        # Improved error handling - don't immediately default to TERMINATE_BRANCH
+        if classification_response_content.startswith("Error:"):
             logger.warning(
-                f"Node classification failed for node {node_to_classify.id}. "
-                f"Defaulting to TERMINATE_BRANCH. Response: {classification_response_content}"
+                f"Node classification API error for node {node_to_classify.id}. "
+                f"Response: {classification_response_content}"
             )
-            node_category = L2TNodeCategory.TERMINATE_BRANCH
+            # For API errors, try to continue reasoning rather than terminating
+            # This allows the process to continue even with transient API issues
+            if "429" in classification_response_content or "Too Many Requests" in classification_response_content:
+                logger.info(f"Rate limit detected, classifying node {node_to_classify.id} as CONTINUE to allow progression")
+                node_category = L2TNodeCategory.CONTINUE
+            else:
+                logger.info(f"API error detected, classifying node {node_to_classify.id} as TERMINATE_BRANCH")
+                node_category = L2TNodeCategory.TERMINATE_BRANCH
+        elif node_category is None:
+            logger.warning(
+                f"Node classification parsing failed for node {node_to_classify.id}. "
+                f"Response: {classification_response_content}"
+            )
+            # If parsing failed but we have a response, try to infer from content
+            response_lower = classification_response_content.lower()
+            if any(word in response_lower for word in ["final", "answer", "solution", "conclude", "decision"]):
+                logger.info(f"Inferring FINAL_ANSWER from response content for node {node_to_classify.id}")
+                node_category = L2TNodeCategory.FINAL_ANSWER
+            elif any(word in response_lower for word in ["continue", "proceed", "next", "further"]):
+                logger.info(f"Inferring CONTINUE from response content for node {node_to_classify.id}")
+                node_category = L2TNodeCategory.CONTINUE
+            elif any(word in response_lower for word in ["terminate", "stop", "end", "dead"]):
+                logger.info(f"Inferring TERMINATE_BRANCH from response content for node {node_to_classify.id}")
+                node_category = L2TNodeCategory.TERMINATE_BRANCH
+            else:
+                logger.info(f"Cannot infer classification, defaulting to CONTINUE for node {node_to_classify.id}")
+                node_category = L2TNodeCategory.CONTINUE
 
         graph.classify_node(node_to_classify.id, node_category)
         logger.info(f"Node {node_to_classify.id} classified as {node_category.name}")
+
+        # Add convergence detection - override classification if content suggests final answer
+        if node_category == L2TNodeCategory.CONTINUE:
+            if self._is_likely_final_answer(node_to_classify.content):
+                logger.info(f"Convergence detected: Node {node_to_classify.id} content suggests final answer, overriding classification")
+                node_category = L2TNodeCategory.FINAL_ANSWER
+                graph.classify_node(node_to_classify.id, node_category)
 
         # Thought Generation / Graph Update
         if node_category == L2TNodeCategory.CONTINUE:
@@ -194,3 +228,141 @@ class NodeProcessor:
             result.total_completion_tokens += stats.completion_tokens
             result.total_prompt_tokens += stats.prompt_tokens
             result.total_llm_interaction_time_seconds += stats.call_duration_seconds
+
+    def _is_likely_final_answer(self, content: str) -> bool:
+        """
+        Analyze thought content to determine if it likely represents a final answer.
+        Returns True if the content suggests this is a conclusive answer.
+        """
+        content_lower = content.lower()
+        
+        # Check for definitive conclusion patterns
+        conclusion_patterns = [
+            "should choose",
+            "the answer is",
+            "the solution is",
+            "therefore",
+            "in conclusion",
+            "the decision should be",
+            "the result is",
+            "the correct",
+            "the best",
+            "the optimal",
+            "should be selected",
+            "is the right",
+            "must be",
+            "final decision",
+            "recommended",
+            "conclusion:",
+            "my recommendation",
+            "i recommend",
+            "the company should",
+            "should go with",
+            "should pick",
+            "is better",
+            "is superior",
+            "is preferable",
+            "would be wise",
+            "makes sense",
+            "clear choice",
+            "obvious choice"
+        ]
+        
+        # Check for decision-making patterns (especially for ethical dilemmas)
+        decision_patterns = [
+            "maneuver",
+            "option",
+            "choice",
+            "alternative",
+            "select",
+            "pick",
+            "decide",
+            "software",
+            "solution",
+            "approach",
+            "method",
+            "strategy"
+        ]
+        
+        # Check for final answer indicators
+        final_indicators = [
+            "final",
+            "ultimate",
+            "definitive",
+            "conclusive",
+            "end result",
+            "bottom line",
+            "summary",
+            "overall"
+        ]
+        
+        # Check for comparative language that suggests a final choice
+        comparative_patterns = [
+            "better than",
+            "worse than",
+            "more than",
+            "less than",
+            "higher than",
+            "lower than",
+            "superior to",
+            "inferior to",
+            "outperforms",
+            "exceeds"
+        ]
+        
+        # Count matches
+        conclusion_matches = sum(1 for pattern in conclusion_patterns if pattern in content_lower)
+        decision_matches = sum(1 for pattern in decision_patterns if pattern in content_lower)
+        final_matches = sum(1 for pattern in final_indicators if pattern in content_lower)
+        comparative_matches = sum(1 for pattern in comparative_patterns if pattern in content_lower)
+        
+        # Check for specific answer format (e.g., "The AV should choose Maneuver B")
+        has_specific_answer = any(pattern in content_lower for pattern in ["should choose", "choose", "select", "recommend"]) and \
+                             any(pattern in content_lower for pattern in ["maneuver", "option", "alternative", "solution", "software"])
+        
+        # Check for value/cost analysis conclusions
+        has_value_conclusion = any(pattern in content_lower for pattern in ["best value", "most cost-effective", "cheapest", "most expensive", "worth it"]) and \
+                              any(pattern in content_lower for pattern in ["therefore", "so", "thus", "hence"])
+        
+        # Check content length - very short content is less likely to be final
+        is_substantial = len(content.strip()) > 30  # Lowered threshold
+        
+        # Check for definitive statements
+        has_definitive_statement = any(pattern in content_lower for pattern in ["clearly", "obviously", "definitely", "certainly", "undoubtedly"])
+        
+        # Check for any form of recommendation or conclusion
+        has_any_conclusion = any(pattern in content_lower for pattern in ["should", "recommend", "suggest", "advise", "propose", "conclude"])
+        
+        # Check for direct answers to questions
+        has_direct_answer = any(pattern in content_lower for pattern in ["yes", "no", "true", "false", "correct", "incorrect"])
+        
+        # Decision logic - made more sensitive
+        if has_specific_answer and is_substantial:
+            return True
+        
+        if has_value_conclusion and is_substantial:
+            return True
+            
+        if conclusion_matches >= 2 and is_substantial:
+            return True
+            
+        if (conclusion_matches >= 1 and decision_matches >= 1 and is_substantial):
+            return True
+            
+        if final_matches >= 1 and conclusion_matches >= 1 and is_substantial:
+            return True
+            
+        if comparative_matches >= 1 and conclusion_matches >= 1 and is_substantial:
+            return True
+            
+        if has_definitive_statement and conclusion_matches >= 1 and is_substantial:
+            return True
+            
+        # More aggressive: any conclusion-like language
+        if has_any_conclusion and is_substantial and len(content.strip()) > 100:
+            return True
+            
+        if has_direct_answer and conclusion_matches >= 1 and is_substantial:
+            return True
+            
+        return False
