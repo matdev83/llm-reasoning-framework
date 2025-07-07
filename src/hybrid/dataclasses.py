@@ -31,10 +31,10 @@ class ReasoningConfig:
 class HybridConfig:
     reasoning_model_name: str
     response_model_name: str
-    reasoning_model_temperature: float = 0.1
-    reasoning_prompt_template: str = "Problem: {problem_description}\n\nThink step-by-step to reach the solution. After you have finished your reasoning, output the token sequence: {reasoning_complete_token}\n\nReasoning:"
+    reasoning_model_temperature: float = 0.9
+    reasoning_prompt_template: str = "Problem: {problem_description}\n\nThink step-by-step to reach the solution. Do NOT provide the final answer - only show your reasoning process.\n\nIMPORTANT: When you finish your reasoning, you MUST output exactly this token: {reasoning_complete_token}\n\nReasoning:"
     reasoning_complete_token: str = "<REASONING_COMPLETE>"
-    response_model_temperature: float = 0.7
+    response_model_temperature: float = 0.3
     response_prompt_template: str = """<problem>
 {problem_description}
 </problem>
@@ -46,10 +46,19 @@ class HybridConfig:
 </reasoning>
 
 <instructions>
-Based on the problem and the reasoning provided above, generate a clear and concise final solution. Reference specific parts of the reasoning where relevant.
+You are a synthesis expert. Based on the problem and the reasoning provided above, generate a clear, concise, and well-structured final solution. 
+
+DO NOT repeat the reasoning verbatim. Instead:
+1. Extract the key insights and correct conclusions from the reasoning
+2. Ignore any errors, repetitions, or incomplete thoughts in the reasoning
+3. Present a clean, organized final answer
+4. Show your work briefly but clearly
+5. State the final answer explicitly
+
+Focus on clarity and correctness, not on reproducing the reasoning process.
 </instructions>"""
-    max_reasoning_tokens: int = 1500
-    max_response_tokens: int = 1500
+    max_reasoning_tokens: int = 4000
+    max_response_tokens: int = 2000
     
     # New OpenRouter reasoning configuration
     reasoning_config: Optional[ReasoningConfig] = None
@@ -383,6 +392,13 @@ Based on the problem and the reasoning provided above, generate a clear and conc
                     "max_response_tokens": 2000     # Adequate response space
                 }
         
+        # Microsoft Phi models: High reasoning capabilities
+        elif "phi" in model_lower and ("reasoning" in model_lower or "phi-4" in model_lower):
+            return {
+                "max_reasoning_tokens": 8000,   # High reasoning capacity for Phi-4
+                "max_response_tokens": 2000,    # Adequate response space
+            }
+        
         # DeepSeek and other reasoning models: ~8,000 estimated max output tokens
         elif any(model in model_lower for model in ["deepseek", "minimax"]):
             return {
@@ -406,8 +422,8 @@ Based on the problem and the reasoning provided above, generate a clear and conc
         model_limits = self.get_model_specific_token_limits(self.reasoning_model_name)
         
         # Use model-specific limits if they differ from defaults, otherwise use configured values
-        default_reasoning = 1500  # Default from dataclass
-        default_response = 1500   # Default from dataclass
+        default_reasoning = 4000  # Default from dataclass
+        default_response = 2000   # Default from dataclass
         
         # If user hasn't explicitly set custom values, use model-specific limits
         if self.max_reasoning_tokens == default_reasoning:

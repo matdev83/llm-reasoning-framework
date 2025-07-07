@@ -4,8 +4,8 @@
 DEFAULT_HYBRID_REASONING_MODEL_NAMES = ["google/gemini-pro"] # Example
 DEFAULT_HYBRID_RESPONSE_MODEL_NAMES = ["anthropic/claude-3-sonnet-20240229"] # Example
 
-DEFAULT_HYBRID_REASONING_TEMPERATURE = 0.1
-DEFAULT_HYBRID_RESPONSE_TEMPERATURE = 0.7
+DEFAULT_HYBRID_REASONING_TEMPERATURE = 0.9
+DEFAULT_HYBRID_RESPONSE_TEMPERATURE = 0.3
 
 # Default prompt templates (can be overridden by CLI arguments)
 # Note: {problem_description} and {reasoning_complete_token} are placeholders for HybridConfig
@@ -28,7 +28,7 @@ Based on the problem and the reasoning provided above, generate a clear and conc
 </instructions>"""
 
 # Generic reasoning prompt (backward compatible)
-DEFAULT_HYBRID_REASONING_PROMPT_TEMPLATE = "Problem: {problem_description}\n\nThink step-by-step to reach the solution. Do NOT provide the final answer. After you have finished your reasoning, output the token sequence: {reasoning_complete_token}\n\nReasoning:"
+DEFAULT_HYBRID_REASONING_PROMPT_TEMPLATE = "Problem: {problem_description}\n\nThink step-by-step to reach the solution. Do NOT provide the final answer - only show your reasoning process.\n\nIMPORTANT: When you finish your reasoning, you MUST output exactly this token: {reasoning_complete_token}\n\nReasoning:"
 DEFAULT_HYBRID_REASONING_COMPLETE_TOKEN = "<REASONING_COMPLETE>"
 DEFAULT_HYBRID_RESPONSE_PROMPT_TEMPLATE = """<problem>
 {problem_description}
@@ -41,7 +41,16 @@ DEFAULT_HYBRID_RESPONSE_PROMPT_TEMPLATE = """<problem>
 </reasoning>
 
 <instructions>
-Based on the problem and the reasoning provided above, generate a clear and concise final solution. Reference specific parts of the reasoning where relevant.
+You are a synthesis expert. Based on the problem and the reasoning provided above, generate a clear, concise, and well-structured final solution. 
+
+DO NOT repeat the reasoning verbatim. Instead:
+1. Extract the key insights and correct conclusions from the reasoning
+2. Ignore any errors, repetitions, or incomplete thoughts in the reasoning
+3. Present a clean, organized final answer
+4. Show your work briefly but clearly
+5. State the final answer explicitly
+
+Focus on clarity and correctness, not on reproducing the reasoning process.
 </instructions>"""
 
 # OpenAI o1 optimized prompt
@@ -95,7 +104,7 @@ REASONING_FORMAT_MAPPINGS = {
     }
 }
 
-DEFAULT_HYBRID_MAX_REASONING_TOKENS = 2000
+DEFAULT_HYBRID_MAX_REASONING_TOKENS = 4000
 DEFAULT_HYBRID_MAX_RESPONSE_TOKENS = 2000
 
 # Default model names for assessment if Hybrid uses ASSESS_FIRST
