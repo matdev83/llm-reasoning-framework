@@ -130,8 +130,8 @@ class ReasoningExtractor:
         
         # Handle custom token first if provided
         if custom_token:
-            reasoning, remaining = self._extract_with_custom_token(text, custom_token)
-            if reasoning:
+            reasoning, remaining = self._extract_with_custom_token(text, custom_token, format_hint)
+            if reasoning or (custom_token in text):  # Return result even if empty reasoning found
                 logger.info(f"Successfully extracted reasoning using custom token: {custom_token}")
                 return reasoning, remaining, ReasoningFormat.CUSTOM_TOKEN
         
@@ -170,19 +170,22 @@ class ReasoningExtractor:
         logger.warning("No reasoning pattern detected in text")
         return "", text, ReasoningFormat.GENERIC_COT
     
-    def _extract_with_custom_token(self, text: str, custom_token: str) -> Tuple[str, str]:
+    def _extract_with_custom_token(self, text: str, custom_token: str, format_hint: Optional[ReasoningFormat] = None) -> Tuple[str, str]:
         """Extract reasoning using a custom completion token"""
+        if custom_token not in text:
+            return "", text
+        
         # Handle DeepSeek-R1 reverse pattern: <REASONING_COMPLETE> followed by reasoning
-        if custom_token in text:
-            if text.strip().startswith(custom_token):
-                # DeepSeek-R1 pattern: token first, then reasoning
-                after_token = text.split(custom_token, 1)[1].strip()
-                return after_token, ""
-            else:
-                # Standard pattern: reasoning first, then token
-                parts = text.split(custom_token, 1)
-                if len(parts) == 2:
-                    return parts[0].strip(), parts[1].strip()
+        # Only use reverse pattern for DeepSeek-R1 models
+        if format_hint == ReasoningFormat.DEEPSEEK_R1 and text.strip().startswith(custom_token):
+            # DeepSeek-R1 pattern: token first, then reasoning
+            after_token = text.split(custom_token, 1)[1].strip()
+            return after_token, ""
+        else:
+            # Standard pattern: reasoning first, then token
+            parts = text.split(custom_token, 1)
+            if len(parts) == 2:
+                return parts[0].strip(), parts[1].strip()
         
         return "", text
     

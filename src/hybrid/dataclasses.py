@@ -35,7 +35,19 @@ class HybridConfig:
     reasoning_prompt_template: str = "Problem: {problem_description}\n\nThink step-by-step to reach the solution. After you have finished your reasoning, output the token sequence: {reasoning_complete_token}\n\nReasoning:"
     reasoning_complete_token: str = "<REASONING_COMPLETE>"
     response_model_temperature: float = 0.7
-    response_prompt_template: str = "Original Problem: {problem_description}\n\nExtracted Reasoning:\n<thinking>{extracted_reasoning}</thinking>\n\nBased on the original problem and the extracted reasoning, provide the final solution."
+    response_prompt_template: str = """<problem>
+{problem_description}
+</problem>
+
+<reasoning>
+<extracted_thoughts>
+{extracted_reasoning}
+</extracted_thoughts>
+</reasoning>
+
+<instructions>
+Based on the problem and the reasoning provided above, generate a clear and concise final solution. Reference specific parts of the reasoning where relevant.
+</instructions>"""
     max_reasoning_tokens: int = 1500
     max_response_tokens: int = 1500
     

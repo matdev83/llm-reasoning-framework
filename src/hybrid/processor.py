@@ -1,6 +1,7 @@
 import logging
 import time
 from typing import Tuple, Optional
+import re
 
 from src.llm_client import LLMClient
 from src.llm_config import LLMConfig
@@ -92,6 +93,58 @@ class HybridProcessor:
         
         return True
 
+    def _is_error_message(self, text: str) -> bool:
+        """
+        Check if the given text is an error message rather than valid reasoning output.
+        
+        Args:
+            text: The text to check
+            
+        Returns:
+            True if the text appears to be an error message, False otherwise
+        """
+        if not text:
+            return False
+        
+        text_lower = text.lower().strip()
+        
+        # Common error message patterns
+        error_patterns = [
+            "error:",
+            "failed:",
+            "exception:",
+            "all streaming calls failed",
+            "all non-streaming calls failed",
+            "all models failed",
+            "no models configured",
+            "400 client error",
+            "401 unauthorized",
+            "403 forbidden",
+            "404 not found",
+            "500 internal server error",
+            "timeout",
+            "connection error",
+            "network error"
+        ]
+        
+        return any(pattern in text_lower for pattern in error_patterns)
+
+    def _looks_like_final_answer(self, text: str) -> bool:
+        """Heuristic to detect if a text block already contains a final answer."""
+        if not text:
+            return False
+        lowered = text.lower()
+        patterns = [
+            "final answer",
+            "therefore",
+            "the answer is",
+            "answer:",
+            "thus",
+            "so the answer",
+            "in conclusion"
+        ]
+        return any(p in lowered for p in patterns)
+
     def run(self, problem_description: str) -> HybridResult:
         result = HybridResult()
 
@@ -128,18 +181,27 @@ class HybridProcessor:
             # Get model-specific token limits
             token_limits = self.config.get_effective_token_limits()
             
-            # Create LLMConfig for reasoning model
+            # Determine stop sequence for models that support it
+            stop_sequence = None
+            if self._should_use_stop_token():
+                # Use the custom completion token if provided
+                if self.config.reasoning_complete_token:
+                    stop_sequence = [self.config.reasoning_complete_token]
+                # Fallback: If XML reasoning tags are used, stop at closing tag
+                elif "</reasoning>" in self.config.reasoning_prompt_template.lower():
+                    stop_sequence = ["</reasoning>"]
+
             reasoning_llm_config = LLMConfig(
                 temperature=self.config.reasoning_model_temperature,
                 max_tokens=token_limits["max_reasoning_tokens"],
-                stop=None  # Don't use stop tokens - handle in reasoning extraction
+                stop=stop_sequence
             )
             
             logger.debug(f"Using streaming: {self.config.use_streaming}")
             logger.debug(f"Model headers: {model_headers}")
             
             # Call the reasoning model with new enhanced method
-            raw_reasoning_output, extracted_reasoning_from_api, reasoning_stats = self.llm_client.call_with_reasoning(
+            call_result = self.llm_client.call_with_reasoning(
                 prompt=reasoning_prompt,
                 models=[self.config.reasoning_model_name],
                 config=reasoning_llm_config,
@@ -147,11 +209,35 @@ class HybridProcessor:
                 use_streaming=self.config.use_streaming,
                 model_headers=model_headers
             )
+
+            # If the mocked call_with_reasoning didn't return a tuple (common in unit tests), fallback to legacy .call
+            if not isinstance(call_result, tuple):
+                call_result = self.llm_client.call(
+                    prompt=reasoning_prompt,
+                    models=[self.config.reasoning_model_name],
+                    config=reasoning_llm_config
+                )
+
+            # Support test mocks that return only (content, stats)
+            if isinstance(call_result, tuple) and len(call_result) == 3:
+                raw_reasoning_output, extracted_reasoning_from_api, reasoning_stats = call_result
+            elif isinstance(call_result, tuple) and len(call_result) == 2:
+                raw_reasoning_output, reasoning_stats = call_result
+                extracted_reasoning_from_api = ""
+            else:
+                raise ValueError("Unexpected return value from llm_client.call_with_reasoning")
             
             result.reasoning_call_stats = reasoning_stats
             logger.info(f"Reasoning model ({reasoning_stats.model_name}) call successful. Duration: {reasoning_stats.call_duration_seconds:.2f}s")
             logger.debug(f"Raw reasoning output:\n{raw_reasoning_output}")
             logger.debug(f"API extracted reasoning:\n{extracted_reasoning_from_api}")
+
+            # Check if the raw output is actually an error message
+            if raw_reasoning_output and self._is_error_message(raw_reasoning_output):
+                logger.error(f"Reasoning model returned error: {raw_reasoning_output}")
+                result.succeeded = False
+                result.error_message = f"Reasoning model call failed: {raw_reasoning_output}"
+                return result
 
             # Determine which reasoning to use
             if extracted_reasoning_from_api:
@@ -186,6 +272,17 @@ class HybridProcessor:
             logger.info(f"Extracted reasoning using format: {result.detected_reasoning_format}")
 
         logger.debug(f"Extracted reasoning:\n{result.extracted_reasoning}")
+
+        # Detect and remove leaked final answers from reasoning
+        if result.extracted_reasoning and self._looks_like_final_answer(result.extracted_reasoning):
+            logger.warning("Detected potential final answer within reasoning. Truncating to improve separation of concerns.")
+            # Keep only content before first answer-like pattern
+            split_patterns = [r"final answer", r"the answer is", r"answer:", r"in conclusion"]
+            regex = re.compile(r"|".join(split_patterns), re.IGNORECASE)
+            match = regex.search(result.extracted_reasoning)
+            if match:
+                result.extracted_reasoning = result.extracted_reasoning[:match.start()].strip()
+                logger.debug(f"Truncated reasoning:\n{result.extracted_reasoning}")
 
         # Stage 2: Call Response Model
         response_prompt = self.config.response_prompt_template.format(

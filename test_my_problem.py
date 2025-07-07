@@ -53,7 +53,19 @@ def test_hybrid_thinking_debug(problem_text, api_key=None):
         response_model_temperature=0.3,
         reasoning_complete_token="<REASONING_COMPLETE>",
         reasoning_prompt_template="Problem: {problem_description}\n\nThink step-by-step to solve this problem. When you finish your reasoning, output exactly: {reasoning_complete_token}\n\nReasoning:",
-        response_prompt_template="Original Problem: {problem_description}\n\nReasoning from first model:\n{extracted_reasoning}\n\nBased on the problem and the reasoning above, provide a clear final answer:",
+        response_prompt_template="""<problem>
+{problem_description}
+</problem>
+
+<reasoning>
+<extracted_thoughts>
+{extracted_reasoning}
+</extracted_thoughts>
+</reasoning>
+
+<instructions>
+Based on the problem and the reasoning provided above, provide a clear final answer.
+</instructions>""",
         max_reasoning_tokens=800,
         max_response_tokens=400,
         reasoning_config=reasoning_config,
@@ -102,6 +114,8 @@ def test_hybrid_thinking_debug(problem_text, api_key=None):
         print(f"   Response tokens: {result.response_call_stats.completion_tokens}")
         print(f"   Total time: {result.reasoning_call_stats.call_duration_seconds + result.response_call_stats.call_duration_seconds:.2f}s")
         print(f"   Detected format: {result.detected_reasoning_format}")
+        print(f"   Reasoning length: {len(result.extracted_reasoning)} characters")
+        print(f"   Full reasoning preserved: {'✅' if len(result.extracted_reasoning) > 200 else '⚠️  (may be truncated by model)'}")
         return True
     else:
         print("❌ FAILED!")
@@ -127,7 +141,19 @@ def test_hybrid_thinking(problem_text, api_key=None):
         response_model_temperature=0.3,
         reasoning_complete_token="<REASONING_COMPLETE>",
         reasoning_prompt_template="Problem: {problem_description}\n\nThink step-by-step to solve this problem. When you finish your reasoning, output exactly: {reasoning_complete_token}\n\nReasoning:",
-        response_prompt_template="Original Problem: {problem_description}\n\nReasoning from first model:\n{extracted_reasoning}\n\nBased on the problem and the reasoning above, provide a clear final answer:",
+        response_prompt_template="""<problem>
+{problem_description}
+</problem>
+
+<reasoning>
+<extracted_thoughts>
+{extracted_reasoning}
+</extracted_thoughts>
+</reasoning>
+
+<instructions>
+Based on the problem and the reasoning provided above, provide a clear final answer.
+</instructions>""",
         max_reasoning_tokens=800,
         max_response_tokens=400,
         reasoning_config=None,  # Use model-specific defaults
@@ -163,8 +189,7 @@ def test_hybrid_thinking(problem_text, api_key=None):
         print()
         print("🧠 REASONING EXTRACTED:")
         print("-" * 50)
-        reasoning_preview = result.extracted_reasoning[:200] + "..." if len(result.extracted_reasoning) > 200 else result.extracted_reasoning
-        print(reasoning_preview)
+        print(result.extracted_reasoning)  # Show full reasoning output without truncation
         print()
         print("💡 FINAL ANSWER:")
         print("-" * 50)
@@ -175,6 +200,8 @@ def test_hybrid_thinking(problem_text, api_key=None):
         print(f"   Response tokens: {result.response_call_stats.completion_tokens}")
         print(f"   Total time: {result.reasoning_call_stats.call_duration_seconds + result.response_call_stats.call_duration_seconds:.2f}s")
         print(f"   Detected format: {result.detected_reasoning_format}")
+        print(f"   Reasoning length: {len(result.extracted_reasoning)} characters")
+        print(f"   Full reasoning preserved: {'✅' if len(result.extracted_reasoning) > 200 else '⚠️  (may be truncated by model)'}")
         return True
     else:
         print("❌ FAILED!")
@@ -647,6 +674,7 @@ def main():
     if len(sys.argv) < 2:
         print("Usage:")
         print("  python test_my_problem.py \"Your problem here\"")
+        print("  python test_my_problem.py \"Your problem here\" --debug  # Show full reasoning output")
         print("  python test_my_problem.py --test-models    # Test model-specific configurations")
         print("  python test_my_problem.py --test-defaults  # Test model-specific default configs")
         print("  python test_my_problem.py --test-token-limits  # Test model-specific token limits")
@@ -656,13 +684,15 @@ def main():
         print()
         print("Examples:")
         print("  python test_my_problem.py \"What is 2+2?\"")
-        print("  python test_my_problem.py \"Explain quantum computing\"")
+        print("  python test_my_problem.py \"Explain quantum computing\" --debug")
         print("  python test_my_problem.py --test-models")
         print("  python test_my_problem.py --test-defaults")
         print("  python test_my_problem.py --test-token-limits")
         print("  python test_my_problem.py --test-gemini")
         print("  python test_my_problem.py --test-optimization")
         print("  python test_my_problem.py --test-qwen-activation")
+        print()
+        print("Note: Regular mode shows full reasoning output. Debug mode shows additional technical details.")
         sys.exit(1)
     
     if sys.argv[1] == "--test-models":

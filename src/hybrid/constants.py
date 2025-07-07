@@ -12,21 +12,69 @@ DEFAULT_HYBRID_RESPONSE_TEMPERATURE = 0.7
 # {extracted_reasoning} is also a placeholder for HybridConfig
 
 # DeepSeek-R1 optimized prompt (uses THINKING tags)
-DEFAULT_DEEPSEEK_R1_REASONING_PROMPT_TEMPLATE = "Problem: {problem_description}\n\nPlease think through this step-by-step using <THINKING> tags before providing your answer.\n\n<THINKING>\n"
-DEFAULT_DEEPSEEK_R1_RESPONSE_PROMPT_TEMPLATE = "Original Problem: {problem_description}\n\nReasoning Process:\n{extracted_reasoning}\n\nBased on the above reasoning, provide the final solution:"
+DEFAULT_DEEPSEEK_R1_REASONING_PROMPT_TEMPLATE = "Problem: {problem_description}\n\nPlease think through this step-by-step using <THINKING> tags before providing your answer.\nDo NOT provide the final answer.\n\n<THINKING>\n"
+DEFAULT_DEEPSEEK_R1_RESPONSE_PROMPT_TEMPLATE = """<problem>
+{problem_description}
+</problem>
+
+<reasoning>
+<extracted_thoughts>
+{extracted_reasoning}
+</extracted_thoughts>
+</reasoning>
+
+<instructions>
+Based on the problem and the reasoning provided above, generate a clear and concise final solution.
+</instructions>"""
 
 # Generic reasoning prompt (backward compatible)
-DEFAULT_HYBRID_REASONING_PROMPT_TEMPLATE = "Problem: {problem_description}\n\nThink step-by-step to reach the solution. After you have finished your reasoning, output the token sequence: {reasoning_complete_token}\n\nReasoning:"
+DEFAULT_HYBRID_REASONING_PROMPT_TEMPLATE = "Problem: {problem_description}\n\nThink step-by-step to reach the solution. Do NOT provide the final answer. After you have finished your reasoning, output the token sequence: {reasoning_complete_token}\n\nReasoning:"
 DEFAULT_HYBRID_REASONING_COMPLETE_TOKEN = "<REASONING_COMPLETE>"
-DEFAULT_HYBRID_RESPONSE_PROMPT_TEMPLATE = "Original Problem: {problem_description}\n\nExtracted Reasoning:\n<thinking>{extracted_reasoning}</thinking>\n\nBased on the original problem and the extracted reasoning, provide the final solution."
+DEFAULT_HYBRID_RESPONSE_PROMPT_TEMPLATE = """<problem>
+{problem_description}
+</problem>
+
+<reasoning>
+<extracted_thoughts>
+{extracted_reasoning}
+</extracted_thoughts>
+</reasoning>
+
+<instructions>
+Based on the problem and the reasoning provided above, generate a clear and concise final solution. Reference specific parts of the reasoning where relevant.
+</instructions>"""
 
 # OpenAI o1 optimized prompt
 DEFAULT_OPENAI_O1_REASONING_PROMPT_TEMPLATE = "Problem: {problem_description}\n\nPlease reason through this problem step by step, showing your work before arriving at the final answer."
-DEFAULT_OPENAI_O1_RESPONSE_PROMPT_TEMPLATE = "Original Problem: {problem_description}\n\nReasoning:\n{extracted_reasoning}\n\nFinal Answer:"
+DEFAULT_OPENAI_O1_RESPONSE_PROMPT_TEMPLATE = """<problem>
+{problem_description}
+</problem>
+
+<reasoning>
+<extracted_thoughts>
+{extracted_reasoning}
+</extracted_thoughts>
+</reasoning>
+
+<instructions>
+Based on the problem and the reasoning provided above, provide your final answer.
+</instructions>"""
 
 # Gemini thinking mode prompt
 DEFAULT_GEMINI_THINKING_PROMPT_TEMPLATE = "Problem: {problem_description}\n\nPlease use thinking mode to analyze this problem systematically before providing your answer."
-DEFAULT_GEMINI_THINKING_RESPONSE_PROMPT_TEMPLATE = "Problem: {problem_description}\n\nAnalysis:\n{extracted_reasoning}\n\nSolution:"
+DEFAULT_GEMINI_THINKING_RESPONSE_PROMPT_TEMPLATE = """<problem>
+{problem_description}
+</problem>
+
+<reasoning>
+<analysis>
+{extracted_reasoning}
+</analysis>
+</reasoning>
+
+<instructions>
+Based on the problem and the analysis provided above, provide your solution.
+</instructions>"""
 
 # Model-specific reasoning formats
 REASONING_FORMAT_MAPPINGS = {

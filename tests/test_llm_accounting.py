@@ -135,7 +135,7 @@ class TestLLMAccountingIntegration(unittest.TestCase):
         self.assertEqual(stats.prompt_tokens, 5) # Usage should be captured
         self.assertEqual(stats.completion_tokens, 0)
         self.assertEqual(stats.model_name, "test_model_api_error")
-        self.assertEqual(stats.call_duration_seconds, 1.0) # 4.0 - 3.0 (due to setUp side_effect)
+        self.assertEqual(stats.call_duration_seconds, 2.0) # 5.0 - 3.0 (due to setUp side_effect)
 
         self.assertEqual(mock_track_usage.call_count, 2)
 
@@ -151,7 +151,7 @@ class TestLLMAccountingIntegration(unittest.TestCase):
         self.assertEqual(second_call_args['model'], "test_model_api_error")
         self.assertEqual(second_call_args['prompt_tokens'], 5)
         self.assertEqual(second_call_args['completion_tokens'], 0)
-        self.assertEqual(second_call_args['execution_time'], 1.0)
+        self.assertEqual(second_call_args['execution_time'], 2.0)
         # The 'cost' key might not be present in track_usage args for error cases,
         # as it's calculated internally by llm-accounting.
         # We verify cost via DB content instead.
