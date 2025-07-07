@@ -109,6 +109,7 @@ class GoTConfig:
     # Termination conditions
     solution_found_score_threshold: float = 0.9 # If a thought reaches this score, it might be a solution
     max_time_seconds: int = 300 # Max time for the GoT process
+    max_reasoning_tokens: Optional[int] = None # Max cumulative completion tokens for all GoT operations
 
 @dataclass
 class GoTModelConfigs:
@@ -126,6 +127,7 @@ class GoTResult:
     total_llm_calls: int = 0
     total_completion_tokens: int = 0
     total_prompt_tokens: int = 0
+    reasoning_completion_tokens: int = 0  # Track tokens used specifically for reasoning operations
     total_llm_interaction_time_seconds: float = 0.0
     total_process_wall_clock_time_seconds: float = 0.0
     succeeded: bool = False

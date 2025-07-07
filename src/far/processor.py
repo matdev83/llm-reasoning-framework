@@ -82,6 +82,10 @@ class FaRProcessor:
                 config=fact_llm_config
             )
             result.fact_call_stats = fact_stats
+            
+            # Track reasoning tokens
+            if fact_stats:
+                result.reasoning_completion_tokens += fact_stats.completion_tokens
 
             # Log incoming response for fact elicitation
             log_llm_response(fact_comm_id, "FaR", ModelRole.FAR_FACT_EXTRACTION, fact_stats.model_name,
@@ -105,6 +109,26 @@ class FaRProcessor:
             # Ensure stats object exists even if call failed partway
             if not result.fact_call_stats:
                 result.fact_call_stats = LLMCallStats(model_name=",".join(self.config.fact_model_names), completion_tokens=0, prompt_tokens=0, call_duration_seconds=0)
+            return result
+
+        # === Resource Constraint Checks Before Phase 2 ===
+        elapsed_time = time.monotonic() - process_start_time
+        
+        # Check time limit
+        if self.config.max_time_seconds > 0 and elapsed_time >= self.config.max_time_seconds:
+            logger.info(f"Time limit ({self.config.max_time_seconds}s) reached after fact elicitation. Skipping reflection phase.")
+            result.succeeded = False
+            result.error_message = f"Time limit ({self.config.max_time_seconds}s) reached after fact elicitation."
+            result.total_process_wall_clock_time_seconds = time.monotonic() - process_start_time
+            return result
+        
+        # Check token budget limit
+        if (self.config.max_reasoning_tokens and 
+            result.reasoning_completion_tokens >= self.config.max_reasoning_tokens):
+            logger.info(f"Token limit ({self.config.max_reasoning_tokens}) reached after fact elicitation. Skipping reflection phase.")
+            result.succeeded = False
+            result.error_message = f"Token limit ({self.config.max_reasoning_tokens}) reached after fact elicitation."
+            result.total_process_wall_clock_time_seconds = time.monotonic() - process_start_time
             return result
 
         # === Step 2: Reflection and Answer Generation ===
@@ -142,6 +166,10 @@ class FaRProcessor:
                 config=main_llm_config
             )
             result.main_call_stats = main_stats
+            
+            # Track reasoning tokens
+            if main_stats:
+                result.reasoning_completion_tokens += main_stats.completion_tokens
 
             # Log incoming response for reflection/answer
             log_llm_response(main_comm_id, "FaR", ModelRole.FAR_REFLECTION_ANSWER, main_stats.model_name,

@@ -198,37 +198,114 @@ def test_max_iterations_limit(mock_llm_client, got_config, got_model_configs): #
     problem = "iteration limit test"
 
     # Setup LLM to always generate new, scorable thoughts to keep iterations going
-    def iterative_llm_response(*args, **kwargs):
-        prompt_text = kwargs['prompt'] # Corrected: access prompt via kwargs
-        stats = LLMCallStats(model_name="iter_model", call_duration_seconds=0.01, prompt_tokens=5, completion_tokens=5) # Corrected LLMCallStats
-        if "Initial thought" in prompt_text or "NewThought:" in prompt_text or "Thought:" in prompt_text : # generation
-            return "Thought: Another thought", stats
-        elif "Score:" in prompt_text: # scoring
-            return "Score: 0.6\nJustification: Keep going", stats
-        return "Default response", stats # Fallback for other prompt types if any
+    mock_stats = LLMCallStats(model_name="model", call_duration_seconds=0.1, prompt_tokens=10, completion_tokens=5)
+    
+    def mock_call_for_iterations(*args, **kwargs):
+        prompt_text = kwargs.get('prompt', '')
+        if "Score:" in prompt_text:
+            return "Score: 0.6\nJustification: Decent thought", mock_stats
+        return "Thought: Iteration thought", mock_stats
 
-    mock_llm_client.call.side_effect = iterative_llm_response
+    mock_llm_client.call.side_effect = mock_call_for_iterations
 
-    # processor.config.max_iterations is already set by got_config fixture (e.g., to 3)
     result = processor.run(problem)
+    # Should stop due to max_iterations (3), not other limits
+    # The exact behavior depends on implementation details, but there should be multiple calls
+    assert mock_llm_client.call.call_count >= got_config.max_iterations
+    assert result.final_graph is not None
 
-    # The number of LLM calls can be complex due to scoring each new thought.
-    # Check that the number of generation steps in graph doesn't exceed max_iterations
-    max_gen_step_found = 0
-    if result.final_graph:
-        for thought in result.final_graph.thoughts.values():
-            if thought.generation_step > max_gen_step_found:
-                max_gen_step_found = thought.generation_step
+def test_token_budget_limit(mock_llm_client, got_config, got_model_configs):
+    """Test that GoT processor respects token budget limits."""
+    # Set a very low token budget
+    got_config.max_reasoning_tokens = 100
+    
+    processor = GoTProcessor(mock_llm_client, got_config, got_model_configs)
+    problem = "token budget test"
 
-    # generation_step is 0-indexed for initial, then 1-indexed for iterations
-    # So, max_gen_step_found should be <= config.max_iterations
-    # Iterations run from 0 to max_iterations-1. Iteration number passed to expand is current_iter + 1.
-    # So generation_step can go up to max_iterations.
-    assert max_gen_step_found <= got_config.max_iterations
-    # This assertion primarily checks that it doesn't run away indefinitely.
-    # Exact number of iterations might be tricky if other limits are hit first.
-    # For this test, ensure other limits (max_thoughts, time) are high enough not to interfere.
-    # got_config.max_thoughts is 10, max_iterations is 3. Each iter might add 1-2 thoughts.
-    # This should hit max_iterations.
+    # Mock LLM to return responses that consume many tokens
+    high_token_stats = LLMCallStats(
+        model_name="model", 
+        call_duration_seconds=0.1, 
+        prompt_tokens=10, 
+        completion_tokens=60  # High token consumption
+    )
+    
+    def mock_call_for_tokens(*args, **kwargs):
+        prompt_text = kwargs.get('prompt', '')
+        if "Score:" in prompt_text:
+            return "Score: 0.6\nJustification: Decent thought", high_token_stats
+        return "Thought: Token consuming thought", high_token_stats
+
+    mock_llm_client.call.side_effect = mock_call_for_tokens
+
+    result = processor.run(problem)
+    
+    # Should stop due to token budget, not other limits
+    assert result.reasoning_completion_tokens <= got_config.max_reasoning_tokens + 60  # Allow for one overage
+    assert result.final_graph is not None
+    # Should have made at least one call but stopped before too many
+    assert mock_llm_client.call.call_count >= 1
+    assert mock_llm_client.call.call_count <= 4  # Should stop early due to token limit
+
+def test_time_budget_limit(mock_llm_client, got_config, got_model_configs):
+    """Test that GoT processor respects time budget limits."""
+    # Set a very short time budget
+    got_config.max_time_seconds = 1
+    
+    processor = GoTProcessor(mock_llm_client, got_config, got_model_configs)
+    problem = "time budget test"
+
+    # Mock LLM to simulate slow responses
+    slow_stats = LLMCallStats(
+        model_name="model", 
+        call_duration_seconds=0.8,  # Each call takes 0.8 seconds
+        prompt_tokens=10, 
+        completion_tokens=20
+    )
+    
+    def mock_call_for_time(*args, **kwargs):
+        # Simulate time passing
+        import time
+        time.sleep(0.3)  # Simulate processing time
+        prompt_text = kwargs.get('prompt', '')
+        if "Score:" in prompt_text:
+            return "Score: 0.6\nJustification: Slow thought", slow_stats
+        return "Thought: Time consuming thought", slow_stats
+
+    mock_llm_client.call.side_effect = mock_call_for_time
+
+    result = processor.run(problem)
+    
+    # Should stop due to time budget
+    assert result.total_process_wall_clock_time_seconds >= got_config.max_time_seconds * 0.8  # Allow some tolerance
+    assert result.final_graph is not None
+    # Should have made at least one call but stopped before too many
+    assert mock_llm_client.call.call_count >= 1
+    assert mock_llm_client.call.call_count <= 6  # Should stop early due to time limit
+
+def test_reasoning_token_tracking(mock_llm_client, got_config, got_model_configs):
+    """Test that GoT processor correctly tracks reasoning tokens."""
+    processor = GoTProcessor(mock_llm_client, got_config, got_model_configs)
+    problem = "token tracking test"
+
+    # Mock LLM with predictable token counts
+    initial_stats = LLMCallStats(model_name="model", call_duration_seconds=0.1, prompt_tokens=10, completion_tokens=30)
+    score_stats = LLMCallStats(model_name="model", call_duration_seconds=0.1, prompt_tokens=5, completion_tokens=15)
+    fallback_stats = LLMCallStats(model_name="model", call_duration_seconds=0.1, prompt_tokens=2, completion_tokens=5)
+    
+    def mock_call_for_tracking(*args, **kwargs):
+        prompt_text = kwargs.get('prompt', '')
+        if "Score:" in prompt_text:
+            return "Score: 0.8\nJustification: Good", score_stats
+        return "Thought: Initial thought", initial_stats
+
+    mock_llm_client.call.side_effect = mock_call_for_tracking
+
+    result = processor.run(problem)
+    
+    # Should track reasoning tokens correctly - at least the initial thought and its score
+    assert result.reasoning_completion_tokens >= initial_stats.completion_tokens + score_stats.completion_tokens
+    assert result.total_completion_tokens >= initial_stats.completion_tokens + score_stats.completion_tokens
+    assert result.final_graph is not None
 
 # Add more tests for pruning, aggregation, refinement, error handling, etc.

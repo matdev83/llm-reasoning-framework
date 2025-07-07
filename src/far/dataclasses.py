@@ -19,8 +19,12 @@ class FaRConfig:
     max_fact_tokens: int = 1000
     max_main_tokens: int = 2000
 
-    # Timeouts, retries, etc. could be added here if needed
+    # Resource management - similar to L2T and AoT
     max_time_seconds: int = 180 # Max time for the entire FaR process
+    max_reasoning_tokens: Optional[int] = None # Max cumulative completion tokens for both fact and main calls
+    max_steps: int = 1  # FaR is typically a 2-step process (fact + reflection), but could be extended
+    no_progress_limit: int = 1  # Not directly applicable to FaR but included for consistency
+    
     # Add other relevant configurations, similar to AoTRunnerConfig or HybridConfig
 
 
@@ -35,6 +39,7 @@ class FaRResult:
 
     fact_call_stats: Optional[LLMCallStats] = None
     main_call_stats: Optional[LLMCallStats] = None
+    reasoning_completion_tokens: int = 0  # Track tokens used specifically for reasoning operations
 
     total_process_wall_clock_time_seconds: float = 0.0
 

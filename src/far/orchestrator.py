@@ -226,8 +226,8 @@ class FaROrchestrator:
 
         # Log outgoing request
         config_info = {"temperature": self.direct_oneshot_llm_config.temperature, "max_tokens": self.direct_oneshot_llm_config.max_tokens}
-        # Use a generic oneshot role if orchestrator is doing it directly, or a specific fallback if it's orchestrator's own fallback
-        model_role = ModelRole.ORCHESTRATOR_ONESHOT_FALLBACK if is_fallback_path else ModelRole.ORCHESTRATOR_DIRECT_ONESHOT
+        # Use appropriate FaR roles for oneshot calls
+        model_role = ModelRole.FAR_ONESHOT_FALLBACK if is_fallback_path else ModelRole.FAR_ONESHOT
         comm_id = log_llm_request("FaR", model_role, self.direct_oneshot_model_names,
                                   problem_text, stage_name, config_info)
 
@@ -246,9 +246,11 @@ class FaROrchestrator:
 
     def solve(self, problem_text: str, model_name_for_far: str = "default_far_model") -> Tuple[FaRSolution, str]:
         # model_name_for_far is for compatibility, actual models from FaRConfig
+        print(f"🔍 ORCHESTRATOR SOLVE CALLED with trigger_mode: {self.trigger_mode}")
         overall_start_time = time.monotonic()
         orchestrator_solution = FaRSolution() # This will accumulate all results
         far_process_execution_summary: Optional[str] = None # Summary from FaRProcess if run
+
 
         if self.trigger_mode == FaRTriggerMode.NEVER_FAR:
             logger.info("Trigger mode: NEVER_FAR. Orchestrator performing direct one-shot call.")
@@ -258,11 +260,19 @@ class FaROrchestrator:
 
         elif self.trigger_mode == FaRTriggerMode.ALWAYS_FAR:
             logger.info("Trigger mode: ALWAYS_FAR. Orchestrator delegating to FaRProcess.")
+            logger.debug(f"About to get or create FaRProcess instance")
             current_far_process = self._get_or_create_far_process_instance()
+            logger.debug(f"Got FaRProcess instance: {current_far_process}")
+            logger.debug(f"About to execute FaRProcess with problem: {problem_text[:50]}...")
             current_far_process.execute(problem_description=problem_text, model_name=model_name_for_far) # model_name is for API consistency
+            logger.debug(f"FaRProcess execute completed")
 
             # Get the solution object and summary string from FaRProcess
             far_solution_obj_from_process, far_process_execution_summary = current_far_process.get_result()
+
+            # Debug logging
+            logger.debug(f"FaRProcess get_result() returned: {far_solution_obj_from_process}")
+            logger.debug(f"FaRProcess summary: {far_process_execution_summary}")
 
             if far_solution_obj_from_process:
                 # Transfer results from FaRProcess's solution to the orchestrator's solution
@@ -281,6 +291,7 @@ class FaROrchestrator:
 
 
         elif self.trigger_mode == FaRTriggerMode.ASSESS_FIRST_FAR:
+            print(f"🔍 Entering ASSESS_FIRST_FAR branch")
             logger.info("Trigger mode: ASSESS_FIRST_FAR. Orchestrator performing complexity assessment.")
             if not self.complexity_assessor:
                 logger.warning("ComplexityAssessor not available for ASSESS_FIRST_FAR mode. Defaulting to ALWAYS_FAR behavior.")

@@ -41,6 +41,7 @@ class GoTProcessor: # Removed ReasoningProcess from inheritance
         if stats:
             result.total_llm_calls += 1
             result.total_completion_tokens += stats.completion_tokens
+            result.reasoning_completion_tokens += stats.completion_tokens  # All GoT operations are reasoning
             result.total_prompt_tokens += stats.prompt_tokens
             result.total_llm_interaction_time_seconds += stats.call_duration_seconds
         # If stats is None, it means an error likely occurred before or during the call,
@@ -340,6 +341,11 @@ class GoTProcessor: # Removed ReasoningProcess from inheritance
             # Termination checks
             if (time.monotonic() - process_start_time) >= self.config.max_time_seconds:
                 logger.info("Max process time limit reached. Stopping GoT iterations.")
+                break
+            # Check token budget limit
+            if (self.config.max_reasoning_tokens and 
+                result.reasoning_completion_tokens >= self.config.max_reasoning_tokens):
+                logger.info(f"Token limit ({self.config.max_reasoning_tokens}) reached. Stopping GoT iterations.")
                 break
             # Check overall thought limit before starting operations that add thoughts
             if len(graph.thoughts) >= self.config.max_thoughts:

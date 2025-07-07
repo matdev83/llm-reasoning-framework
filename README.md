@@ -139,6 +139,37 @@ python -m src.cli_runner --processing-mode far-assess-first --problem "What is t
 python -m src.cli_runner --processing-mode far-direct --problem "Describe the process of photosynthesis and its importance."
 ```
 
+## Resource Management
+
+All reasoning processes (AoT, L2T, GoT, FaR) include comprehensive resource management capabilities to control computational costs and processing time:
+
+### Token Budget Management
+- **Purpose**: Controls the maximum number of completion tokens used during reasoning operations
+- **Implementation**: Tracks cumulative token usage across all LLM calls and stops processing when budget is exceeded
+- **Configuration**: Set via `--{strategy}-max-reasoning-tokens` parameters (e.g., `--aot-max-reasoning-tokens`, `--got-max-reasoning-tokens`)
+
+### Time Constraints
+- **Purpose**: Limits the wall-clock time spent on reasoning processes
+- **Implementation**: Monitors elapsed time and terminates processing when time limit is reached
+- **Configuration**: Set via `--{strategy}-max-time-seconds` parameters (e.g., `--aot-max-time`, `--far-max-time-seconds`)
+
+### Step Limits
+- **Purpose**: Controls the maximum number of reasoning iterations or steps
+- **Implementation**: Counts reasoning steps and stops when limit is reached
+- **Configuration**: Set via `--{strategy}-max-steps` parameters (available for AoT, L2T)
+
+### Examples with Resource Constraints
+```bash
+# AoT with token budget and time limits
+python -m src.cli_runner --processing-mode aot-always --problem "Complex reasoning task" --aot-max-reasoning-tokens 5000 --aot-max-time 300
+
+# GoT with token budget control
+python -m src.cli_runner --processing-mode got-always --problem "Multi-step analysis" --got-max-reasoning-tokens 8000 --got-max-time-seconds 600
+
+# FaR with time and token constraints
+python -m src.cli_runner --processing-mode far-always --problem "Fact-based question" --far-max-reasoning-tokens 3000 --far-max-time-seconds 180
+```
+
 ### CLI Parameters
 
 Here are the available command-line arguments:

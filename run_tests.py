@@ -13,6 +13,8 @@ Usage:
     python run_tests.py --integration      # Run integration tests only  
     python run_tests.py --all              # Run all tests
     python run_tests.py --hybrid           # Run hybrid-related tests only
+    python run_tests.py --far              # Run FaR-related tests only
+    python run_tests.py --far --integration # Run FaR tests including real integration tests
     python run_tests.py --verbose          # Run with verbose output
     python run_tests.py --coverage         # Run with coverage report
 """
@@ -42,6 +44,8 @@ def main():
                        help="Run all tests including integration tests")
     parser.add_argument("--hybrid", action="store_true",
                        help="Run hybrid-related tests only")
+    parser.add_argument("--far", action="store_true",
+                       help="Run FaR-related tests only")
     parser.add_argument("--functionality", action="store_true",
                        help="Run functionality tests that catch method signature issues")
     parser.add_argument("--verbose", "-v", action="store_true",
@@ -84,6 +88,12 @@ def main():
         if args.functionality:
             cmd.append("tests/hybrid/test_hybrid_functionality.py")
         description = "Running HYBRID tests only"
+    elif args.far:
+        cmd.append("tests/far/")
+        cmd.append("tests/integration/test_far_integration.py")
+        if args.integration:
+            cmd.append("tests/integration/test_far_real_integration.py")
+        description = "Running FaR tests only"
     elif args.functionality:
         cmd.append("tests/hybrid/test_hybrid_method_signatures.py")
         description = "Running FUNCTIONALITY tests (method signature validation)"
@@ -114,6 +124,10 @@ def main():
         print("   - They test end-to-end functionality with actual models")
         print("   - Requires OPENROUTER_API_KEY environment variable")
         print("   - Tests use: deepseek/deepseek-r1-0528:free and openrouter/cypher-alpha:free")
+        print("\n📋 Available Integration Tests:")
+        print("   - Hybrid: tests/integration/test_hybrid_integration.py (2 tests)")
+        print("   - FaR: tests/integration/test_far_real_integration.py (9 tests)")
+        print("   - FaR (mocked): tests/integration/test_far_integration.py (5 tests)")
 
 if __name__ == "__main__":
     main() 

@@ -226,6 +226,7 @@ def main():
     got_group.add_argument("--got-max-parents-for-aggregation", type=int, default=5, help="GoT: Max parents to consider for aggregation. Default: 5")
     got_group.add_argument("--got-solution-found-score-threshold", type=float, default=0.9, help="GoT: If a thought reaches this score, it might be a solution. Default: 0.9")
     got_group.add_argument("--got-max-time-seconds", type=int, default=300, help="GoT: Max time for the GoT process. Default: 300s")
+    got_group.add_argument("--got-max-reasoning-tokens", type=int, default=None, help="GoT: Max cumulative completion tokens for all GoT operations. Default: None (no limit)")
     got_group.add_argument("--got-disable-aggregation", action="store_false", dest="got_enable_aggregation", help="GoT: Disable aggregation step.")
     got_group.add_argument("--got-disable-refinement", action="store_false", dest="got_enable_refinement", help="GoT: Disable refinement step.")
     got_group.add_argument("--got-disable-pruning", action="store_false", dest="got_enable_pruning", help="GoT: Disable pruning step.")
@@ -265,6 +266,10 @@ def main():
                            help=f"Fallback/direct one-shot LLM(s) for FaR Orchestrator. Default: {' '.join(DEFAULT_FAR_ONESHOT_MODEL_NAMES)}")
     far_group.add_argument("--far-oneshot-temp", type=float, default=DEFAULT_FAR_ONESHOT_TEMPERATURE,
                            help=f"Temperature for FaR Orchestrator's one-shot. Default: {DEFAULT_FAR_ONESHOT_TEMPERATURE}")
+    far_group.add_argument("--far-max-time-seconds", type=int, default=180,
+                           help="FaR: Max time for the entire FaR process. Default: 180s")
+    far_group.add_argument("--far-max-reasoning-tokens", type=int, default=None,
+                           help="FaR: Max cumulative completion tokens for both fact and main calls. Default: None (no limit)")
     far_group.add_argument("--far-disable-heuristic", action="store_true",
                            help="Disable local heuristic for FaR complexity assessment.")
 
@@ -376,7 +381,8 @@ def main():
         enable_refinement=args.got_enable_refinement,
         enable_pruning=args.got_enable_pruning,
         solution_found_score_threshold=args.got_solution_found_score_threshold,
-        max_time_seconds=args.got_max_time_seconds
+        max_time_seconds=args.got_max_time_seconds,
+        max_reasoning_tokens=args.got_max_reasoning_tokens
     )
     got_llm_configs = GoTModelConfigs(
         thought_generation_config=LLMConfig(temperature=args.got_thought_gen_temp),
@@ -393,7 +399,9 @@ def main():
         fact_model_temperature=args.far_fact_temp,
         main_model_temperature=args.far_main_temp,
         max_fact_tokens=args.far_max_fact_tokens,
-        max_main_tokens=args.far_max_main_tokens
+        max_main_tokens=args.far_max_main_tokens,
+        max_time_seconds=args.far_max_time_seconds,
+        max_reasoning_tokens=args.far_max_reasoning_tokens
     )
     far_assessment_llm_config = LLMConfig(temperature=args.far_assess_temp)
     far_orchestrator_oneshot_llm_config = LLMConfig(temperature=args.far_oneshot_temp)

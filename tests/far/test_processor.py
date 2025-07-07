@@ -67,12 +67,12 @@ def test_far_processor_successful_run(mock_load_template, mock_llm_client, far_c
     assert len(calls) == 2
     # First call (fact elicitation)
     args, kwargs = calls[0]
-    assert args[0] == expected_fact_prompt
+    assert kwargs['prompt'] == expected_fact_prompt
     assert kwargs['models'] == far_config.fact_model_names
     assert kwargs['config'] == fact_llm_config_expected
     # Second call (reflection/answer)
     args, kwargs = calls[1]
-    assert args[0] == expected_reflection_prompt
+    assert kwargs['prompt'] == expected_reflection_prompt
     assert kwargs['models'] == far_config.main_model_names
     assert kwargs['config'] == main_llm_config_expected
 
@@ -133,12 +133,12 @@ def test_far_processor_prompt_template_load_failure(mock_load_template, mock_llm
 
     processor = FaRProcessor(llm_client=mock_llm_client, config=far_config)
 
-    with pytest.raises(FileNotFoundError): # Expecting the processor to re-raise this
-        result = processor.run(problem_desc)
-        # The following assertions are for if we decide to catch and return FaRResult instead of re-raising
-        # assert not result.succeeded
-        # assert "Prompt template file not found" in result.error_message
-        # mock_llm_client.call.assert_not_called()
+    result = processor.run(problem_desc)
+    # The processor catches the exception and returns a failed result
+    assert not result.succeeded
+    assert "Exception in fact elicitation phase" in result.error_message
+    assert "Prompt file not found" in result.error_message
+    mock_llm_client.call.assert_not_called()
 
 
 # Realistic question examples for testing prompt construction and data flow
@@ -174,5 +174,144 @@ def test_far_processor_realistic_questions(mock_load_template, mock_llm_client, 
     expected_reflection_prompt = MOCK_REFLECTION_PROMPT_TEMPLATE.format(problem_description=problem_desc, elicited_facts=mock_facts)
 
     calls = mock_llm_client.call.call_args_list
-    assert calls[0][0][0] == expected_fact_prompt # prompt text for fact call
-    assert calls[1][0][0] == expected_reflection_prompt # prompt text for reflection call
+    assert calls[0][1]['prompt'] == expected_fact_prompt # prompt text for fact call
+    assert calls[1][1]['prompt'] == expected_reflection_prompt # prompt text for reflection call
+
+@patch('src.far.processor.FaRProcessor._load_prompt_template')
+def test_far_processor_token_budget_limit(mock_load_template, mock_llm_client, far_config):
+    """Test that FaR processor respects token budget limits."""
+    mock_load_template.side_effect = lambda template_name: MOCK_FACT_PROMPT_TEMPLATE if template_name == "far_fact_elicitation.txt" else MOCK_REFLECTION_PROMPT_TEMPLATE
+    
+    # Set a low token budget
+    far_config.max_reasoning_tokens = 50
+    
+    problem_desc = "Token budget test problem"
+    elicited_facts = "Some facts"
+    
+    # Mock fact call to consume many tokens
+    high_token_stats = LLMCallStats(
+        model_name="mock/fact-model", 
+        completion_tokens=60,  # Exceeds budget
+        prompt_tokens=5, 
+        call_duration_seconds=1.0
+    )
+    
+    mock_llm_client.call.return_value = (elicited_facts, high_token_stats)
+    
+    processor = FaRProcessor(llm_client=mock_llm_client, config=far_config)
+    result = processor.run(problem_desc)
+    
+    # Should fail due to token budget exceeded after fact elicitation
+    assert not result.succeeded
+    assert "Token limit" in result.error_message
+    assert result.elicited_facts == elicited_facts
+    assert result.final_answer is None
+    assert result.reasoning_completion_tokens == 60
+    assert result.fact_call_stats is not None
+    assert result.main_call_stats is None  # Should not reach reflection phase
+    mock_llm_client.call.assert_called_once()  # Only fact call should be made
+
+@patch('src.far.processor.FaRProcessor._load_prompt_template')
+def test_far_processor_time_budget_limit(mock_load_template, mock_llm_client, far_config):
+    """Test that FaR processor respects time budget limits."""
+    mock_load_template.side_effect = lambda template_name: MOCK_FACT_PROMPT_TEMPLATE if template_name == "far_fact_elicitation.txt" else MOCK_REFLECTION_PROMPT_TEMPLATE
+    
+    # Set a very short time budget
+    far_config.max_time_seconds = 1
+    
+    problem_desc = "Time budget test problem"
+    elicited_facts = "Some facts"
+    
+    # Mock fact call to take a long time
+    slow_stats = LLMCallStats(
+        model_name="mock/fact-model", 
+        completion_tokens=10,
+        prompt_tokens=5, 
+        call_duration_seconds=1.5  # Exceeds budget
+    )
+    
+    def slow_call(*args, **kwargs):
+        import time
+        time.sleep(1.2)  # Simulate slow processing
+        return elicited_facts, slow_stats
+    
+    mock_llm_client.call.side_effect = slow_call
+    
+    processor = FaRProcessor(llm_client=mock_llm_client, config=far_config)
+    result = processor.run(problem_desc)
+    
+    # Should fail due to time budget exceeded after fact elicitation
+    assert not result.succeeded
+    assert "Time limit" in result.error_message
+    assert result.elicited_facts == elicited_facts
+    assert result.final_answer is None
+    assert result.reasoning_completion_tokens == 10
+    assert result.fact_call_stats is not None
+    assert result.main_call_stats is None  # Should not reach reflection phase
+    mock_llm_client.call.assert_called_once()  # Only fact call should be made
+
+@patch('src.far.processor.FaRProcessor._load_prompt_template')
+def test_far_processor_reasoning_token_tracking(mock_load_template, mock_llm_client, far_config):
+    """Test that FaR processor correctly tracks reasoning tokens."""
+    mock_load_template.side_effect = lambda template_name: MOCK_FACT_PROMPT_TEMPLATE if template_name == "far_fact_elicitation.txt" else MOCK_REFLECTION_PROMPT_TEMPLATE
+    
+    problem_desc = "Token tracking test"
+    elicited_facts = "Some facts"
+    final_answer = "Some answer"
+    
+    # Mock calls with predictable token counts
+    fact_stats = LLMCallStats(model_name="mock/fact-model", completion_tokens=25, prompt_tokens=10, call_duration_seconds=1.0)
+    main_stats = LLMCallStats(model_name="mock/main-model", completion_tokens=35, prompt_tokens=15, call_duration_seconds=2.0)
+    
+    mock_llm_client.call.side_effect = [
+        (elicited_facts, fact_stats),
+        (final_answer, main_stats)
+    ]
+    
+    processor = FaRProcessor(llm_client=mock_llm_client, config=far_config)
+    result = processor.run(problem_desc)
+    
+    # Should track reasoning tokens correctly
+    expected_reasoning_tokens = fact_stats.completion_tokens + main_stats.completion_tokens
+    assert result.succeeded
+    assert result.reasoning_completion_tokens == expected_reasoning_tokens
+    assert result.total_completion_tokens == expected_reasoning_tokens
+    assert result.total_prompt_tokens == fact_stats.prompt_tokens + main_stats.prompt_tokens
+    assert result.fact_call_stats is not None
+    assert result.main_call_stats is not None
+
+@patch('src.far.processor.FaRProcessor._load_prompt_template')
+def test_far_processor_successful_within_budget(mock_load_template, mock_llm_client, far_config):
+    """Test that FaR processor completes successfully when within budget constraints."""
+    mock_load_template.side_effect = lambda template_name: MOCK_FACT_PROMPT_TEMPLATE if template_name == "far_fact_elicitation.txt" else MOCK_REFLECTION_PROMPT_TEMPLATE
+    
+    # Set reasonable budgets
+    far_config.max_reasoning_tokens = 100
+    far_config.max_time_seconds = 10
+    
+    problem_desc = "Budget test problem"
+    elicited_facts = "Some facts"
+    final_answer = "Some answer"
+    
+    # Mock calls within budget
+    fact_stats = LLMCallStats(model_name="mock/fact-model", completion_tokens=20, prompt_tokens=10, call_duration_seconds=1.0)
+    main_stats = LLMCallStats(model_name="mock/main-model", completion_tokens=30, prompt_tokens=15, call_duration_seconds=2.0)
+    
+    mock_llm_client.call.side_effect = [
+        (elicited_facts, fact_stats),
+        (final_answer, main_stats)
+    ]
+    
+    processor = FaRProcessor(llm_client=mock_llm_client, config=far_config)
+    result = processor.run(problem_desc)
+    
+    # Should complete successfully
+    assert result.succeeded
+    assert result.elicited_facts == elicited_facts
+    assert result.final_answer == final_answer
+    assert result.reasoning_completion_tokens == 50  # 20 + 30
+    assert result.reasoning_completion_tokens < far_config.max_reasoning_tokens
+    assert result.total_process_wall_clock_time_seconds < far_config.max_time_seconds
+    assert result.fact_call_stats is not None
+    assert result.main_call_stats is not None
+    assert mock_llm_client.call.call_count == 2  # Both calls should be made
