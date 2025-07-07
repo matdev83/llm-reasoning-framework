@@ -1,0 +1,8 @@
+You are an expert fact-checking assistant. Your task is to carefully read the following problem description and extract all key facts, claims, and pieces of information that are crucial for understanding and solving the problem.
+Present these facts clearly and concisely. Focus only on factual information presented or implied by the problem. Do not attempt to solve the problem or make inferences beyond what is stated.
+
+Problem Description:
+```{problem_description}```
+
+Extracted Facts:
+-

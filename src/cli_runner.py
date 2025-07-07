@@ -9,7 +9,6 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from src.llm_client import LLMClient
 from src.llm_config import LLMConfig
-# from src.prompt_generator import PromptGenerator # No longer directly used in CLI runner
 
 from src.aot.enums import AotTriggerMode
 from src.aot.dataclasses import AoTRunnerConfig, Solution as AoTSolution
@@ -28,7 +27,7 @@ from src.aot.constants import (
 from src.l2t.enums import L2TTriggerMode
 from src.l2t.orchestrator import L2TOrchestrator
 from src.l2t.processor import L2TProcessor
-from src.l2t.dataclasses import L2TConfig, L2TSolution, L2TModelConfigs # Re-added L2TModelConfigs
+from src.l2t.dataclasses import L2TConfig, L2TSolution, L2TModelConfigs
 from src.l2t_orchestrator_utils.summary_generator import L2TSummaryGenerator
 from src.l2t.constants import (
     DEFAULT_L2T_CLASSIFICATION_MODEL_NAMES,
@@ -45,7 +44,6 @@ from src.l2t.constants import (
 )
 from src.heuristic_detector import HeuristicDetector
 
-# Hybrid Process Imports
 from src.hybrid.enums import HybridTriggerMode
 from src.hybrid.orchestrator import HybridOrchestrator, HybridProcess
 from src.hybrid.dataclasses import HybridConfig, HybridSolution
@@ -65,12 +63,28 @@ from src.hybrid.constants import (
     DEFAULT_HYBRID_ONESHOT_TEMPERATURE,
 )
 
-# GoT Imports
 from src.got.enums import GoTTriggerMode
 from src.got.dataclasses import GoTConfig, GoTModelConfigs, GoTSolution
 from src.got.orchestrator import GoTOrchestrator, GoTProcess
 from src.got.processor import GoTProcessor
 from src.got.summary_generator import GoTSummaryGenerator
+
+# FaR Imports
+from src.far.enums import FaRTriggerMode
+from src.far.dataclasses import FaRConfig, FaRSolution
+from src.far.orchestrator import FaROrchestrator, FaRProcess
+from src.far.constants import (
+    REQUESTED_FAR_FACT_MODEL_NAMES,
+    REQUESTED_FAR_MAIN_MODEL_NAMES,
+    DEFAULT_FAR_FACT_TEMPERATURE,
+    DEFAULT_FAR_MAIN_TEMPERATURE,
+    DEFAULT_FAR_MAX_FACT_TOKENS,
+    DEFAULT_FAR_MAX_MAIN_TOKENS,
+    DEFAULT_FAR_ASSESSMENT_MODEL_NAMES,
+    DEFAULT_FAR_ASSESSMENT_TEMPERATURE,
+    DEFAULT_FAR_ONESHOT_MODEL_NAMES,
+    DEFAULT_FAR_ONESHOT_TEMPERATURE,
+)
 
 
 # Helper to define new direct processing modes
@@ -78,23 +92,24 @@ DIRECT_AOT_MODE = "aot-direct"
 DIRECT_L2T_MODE = "l2t-direct"
 DIRECT_HYBRID_MODE = "hybrid-direct"
 DIRECT_GOT_MODE = "got-direct"
+DIRECT_FAR_MODE = "far-direct"
 
 def main():
     parser = argparse.ArgumentParser(
-        description="CLI Runner for Answer On Thought (AoT), Learn-to-Think (L2T), and Hybrid reasoning processes.",
+        description="CLI Runner for various LLM reasoning processes.",
         formatter_class=argparse.RawTextHelpFormatter
     )
     problem_group = parser.add_mutually_exclusive_group(required=True)
     problem_group.add_argument("--problem", "-p", type=str, help="Problem/question to solve.")
     problem_group.add_argument("--problem-filename", type=str, help="File containing the problem.")
 
-    # Redefine choices for processing mode to be more explicit
     all_modes = sorted(list(set([
         "aot-always", "aot-assess-first", "aot-never",
         "l2t",
         "hybrid-always", "hybrid-assess-first", "hybrid-never",
-        "got-always", "got-assess-first", "got-never", # GoT Orchestrator modes
-        DIRECT_AOT_MODE, DIRECT_L2T_MODE, DIRECT_HYBRID_MODE, DIRECT_GOT_MODE # Direct Process modes
+        "got-always", "got-assess-first", "got-never",
+        "far-always", "far-assess-first", "far-never", # FaR Orchestrator modes
+        DIRECT_AOT_MODE, DIRECT_L2T_MODE, DIRECT_HYBRID_MODE, DIRECT_GOT_MODE, DIRECT_FAR_MODE # Direct Process modes
     ])))
 
     parser.add_argument(
@@ -107,7 +122,8 @@ def main():
               f"  L2T Orchestrator Mode: 'l2t'\n"
               f"  Hybrid Orchestrator Modes: 'hybrid-always', 'hybrid-assess-first', 'hybrid-never'\n"
               f"  GoT Orchestrator Modes: 'got-always', 'got-assess-first', 'got-never'\n"
-              f"  Direct Process Modes: '{DIRECT_AOT_MODE}', '{DIRECT_L2T_MODE}', '{DIRECT_HYBRID_MODE}', '{DIRECT_GOT_MODE}'")
+              f"  FaR Orchestrator Modes: 'far-always', 'far-assess-first', 'far-never'\n"
+              f"  Direct Process Modes: '{DIRECT_AOT_MODE}', '{DIRECT_L2T_MODE}', '{DIRECT_HYBRID_MODE}', '{DIRECT_GOT_MODE}', '{DIRECT_FAR_MODE}'")
     )
 
     parser.add_argument("--enable-rate-limiting", action="store_true", help="Enable rate limiting for LLM calls.")
@@ -202,7 +218,6 @@ def main():
                            help="LLM(s) for GoT thought aggregation. Default: openai/gpt-4o-mini")
     got_group.add_argument("--got-refinement-models", nargs='+', default=["openai/gpt-4o-mini"],
                            help="LLM(s) for GoT thought refinement. Default: openai/gpt-4o-mini")
-
     got_group.add_argument("--got-max-thoughts", type=int, default=50, help="GoT: Max total thoughts in the graph. Default: 50")
     got_group.add_argument("--got-max-iterations", type=int, default=10, help="GoT: Max iterations of generation/transformation. Default: 10")
     got_group.add_argument("--got-min-score-for-expansion", type=float, default=0.5, help="GoT: Minimum score to consider a thought for expansion. Default: 0.5")
@@ -211,18 +226,15 @@ def main():
     got_group.add_argument("--got-max-parents-for-aggregation", type=int, default=5, help="GoT: Max parents to consider for aggregation. Default: 5")
     got_group.add_argument("--got-solution-found-score-threshold", type=float, default=0.9, help="GoT: If a thought reaches this score, it might be a solution. Default: 0.9")
     got_group.add_argument("--got-max-time-seconds", type=int, default=300, help="GoT: Max time for the GoT process. Default: 300s")
-
     got_group.add_argument("--got-disable-aggregation", action="store_false", dest="got_enable_aggregation", help="GoT: Disable aggregation step.")
     got_group.add_argument("--got-disable-refinement", action="store_false", dest="got_enable_refinement", help="GoT: Disable refinement step.")
     got_group.add_argument("--got-disable-pruning", action="store_false", dest="got_enable_pruning", help="GoT: Disable pruning step.")
     parser.set_defaults(got_enable_aggregation=True, got_enable_refinement=True, got_enable_pruning=True)
-
     got_group.add_argument("--got-thought-gen-temp", type=float, default=0.7, help="GoT: Temperature for thought generation. Default: 0.7")
     got_group.add_argument("--got-scoring-temp", type=float, default=0.2, help="GoT: Temperature for scoring. Default: 0.2")
     got_group.add_argument("--got-aggregation-temp", type=float, default=0.7, help="GoT: Temperature for aggregation. Default: 0.7")
     got_group.add_argument("--got-refinement-temp", type=float, default=0.7, help="GoT: Temperature for refinement. Default: 0.7")
     got_group.add_argument("--got-orchestrator-oneshot-temp", type=float, default=0.7, help="GoT: Temperature for orchestrator's one-shot/fallback. Default: 0.7")
-
     got_group.add_argument("--got-assess-models", type=str, nargs='+', default=DEFAULT_AOT_ASSESSMENT_MODEL_NAMES,
                            help=f"Assessment LLM(s) for GoT (if assess_first). Default: {' '.join(DEFAULT_AOT_ASSESSMENT_MODEL_NAMES)}")
     got_group.add_argument("--got-assess-temp", type=float, default=DEFAULT_AOT_ASSESSMENT_TEMPERATURE,
@@ -231,6 +243,30 @@ def main():
                            help=f"Fallback one-shot LLM(s) for GoT Orchestrator. Default: {' '.join(DEFAULT_AOT_MAIN_MODEL_NAMES)}")
     got_group.add_argument("--got-disable-heuristic", action="store_true", help="Disable local heuristic for GoT complexity assessment.")
 
+    # FaR Configuration Group
+    far_group = parser.add_argument_group('FaR Process Configuration')
+    far_group.add_argument("--far-fact-models", type=str, nargs='+', default=REQUESTED_FAR_FACT_MODEL_NAMES,
+                           help=f"Fact-finding LLM(s) for FaR. Default: {' '.join(REQUESTED_FAR_FACT_MODEL_NAMES)}")
+    far_group.add_argument("--far-fact-temp", type=float, default=DEFAULT_FAR_FACT_TEMPERATURE,
+                           help=f"Temperature for FaR fact LLM(s). Default: {DEFAULT_FAR_FACT_TEMPERATURE}")
+    far_group.add_argument("--far-main-models", type=str, nargs='+', default=REQUESTED_FAR_MAIN_MODEL_NAMES,
+                           help=f"Main LLM(s) for FaR. Default: {' '.join(REQUESTED_FAR_MAIN_MODEL_NAMES)}")
+    far_group.add_argument("--far-main-temp", type=float, default=DEFAULT_FAR_MAIN_TEMPERATURE,
+                           help=f"Temperature for FaR main LLM(s). Default: {DEFAULT_FAR_MAIN_TEMPERATURE}")
+    far_group.add_argument("--far-max-fact-tokens", type=int, default=DEFAULT_FAR_MAX_FACT_TOKENS,
+                           help=f"Max tokens for FaR fact elicitation. Default: {DEFAULT_FAR_MAX_FACT_TOKENS}")
+    far_group.add_argument("--far-max-main-tokens", type=int, default=DEFAULT_FAR_MAX_MAIN_TOKENS,
+                           help=f"Max tokens for FaR main response. Default: {DEFAULT_FAR_MAX_MAIN_TOKENS}")
+    far_group.add_argument("--far-assess-models", type=str, nargs='+', default=DEFAULT_FAR_ASSESSMENT_MODEL_NAMES,
+                           help=f"Assessment LLM(s) for FaR (if assess_first). Default: {' '.join(DEFAULT_FAR_ASSESSMENT_MODEL_NAMES)}")
+    far_group.add_argument("--far-assess-temp", type=float, default=DEFAULT_FAR_ASSESSMENT_TEMPERATURE,
+                           help=f"Temperature for FaR assessment LLM(s). Default: {DEFAULT_FAR_ASSESSMENT_TEMPERATURE}")
+    far_group.add_argument("--far-oneshot-models", type=str, nargs='+', default=DEFAULT_FAR_ONESHOT_MODEL_NAMES,
+                           help=f"Fallback/direct one-shot LLM(s) for FaR Orchestrator. Default: {' '.join(DEFAULT_FAR_ONESHOT_MODEL_NAMES)}")
+    far_group.add_argument("--far-oneshot-temp", type=float, default=DEFAULT_FAR_ONESHOT_TEMPERATURE,
+                           help=f"Temperature for FaR Orchestrator's one-shot. Default: {DEFAULT_FAR_ONESHOT_TEMPERATURE}")
+    far_group.add_argument("--far-disable-heuristic", action="store_true",
+                           help="Disable local heuristic for FaR complexity assessment.")
 
     args = parser.parse_args()
 
@@ -264,7 +300,7 @@ def main():
             sys.exit(1)
 
     current_processing_mode = args.processing_mode
-    solution: Optional[Union[AoTSolution, L2TSolution, HybridSolution, GoTSolution]] = None
+    solution: Optional[Union[AoTSolution, L2TSolution, HybridSolution, GoTSolution, FaRSolution]] = None
     overall_summary_str = ""
 
     heuristic_detector_instance: Optional[HeuristicDetector] = None
@@ -272,7 +308,8 @@ def main():
     if (current_processing_mode == "aot-assess-first" and not args.aot_disable_heuristic) or \
        (current_processing_mode == "hybrid-assess-first" and not args.hybrid_disable_heuristic) or \
        (current_processing_mode == "got-assess-first" and not args.got_disable_heuristic) or \
-       (current_processing_mode == "l2t"): # L2T uses it internally by default
+       (current_processing_mode == "far-assess-first" and not args.far_disable_heuristic) or \
+       (current_processing_mode == "l2t"):
         needs_heuristic_detector = True
 
     if needs_heuristic_detector:
@@ -284,14 +321,14 @@ def main():
         aot_pass_remaining_steps_float = args.aot_pass_remaining_steps_pct / 100.0
     
     aot_runner_config = AoTRunnerConfig(
-        main_model_names=args.aot_main_models, # Note: AoT direct process uses this from runner_config
+        main_model_names=args.aot_main_models,
         max_steps=args.aot_max_steps,
         max_reasoning_tokens=args.aot_max_reasoning_tokens,
         max_time_seconds=args.aot_max_time,
         no_progress_limit=args.aot_no_progress_limit,
         pass_remaining_steps_pct=aot_pass_remaining_steps_float
     )
-    aot_main_llm_config = LLMConfig(temperature=args.aot_main_temp, max_tokens=2048) # Added max_tokens
+    aot_main_llm_config = LLMConfig(temperature=args.aot_main_temp, max_tokens=2048)
     aot_assessment_llm_config = LLMConfig(temperature=args.aot_assess_temp)
 
     l2t_config = L2TConfig(
@@ -346,9 +383,20 @@ def main():
         scoring_config=LLMConfig(temperature=args.got_scoring_temp),
         aggregation_config=LLMConfig(temperature=args.got_aggregation_temp),
         refinement_config=LLMConfig(temperature=args.got_refinement_temp),
-        orchestrator_oneshot_config=LLMConfig(temperature=args.got_orchestrator_oneshot_temp) # Used by GoTProcess and Orchestrator
+        orchestrator_oneshot_config=LLMConfig(temperature=args.got_orchestrator_oneshot_temp)
     )
     got_assessment_llm_config = LLMConfig(temperature=args.got_assess_temp)
+
+    far_base_config = FaRConfig(
+        fact_model_names=args.far_fact_models,
+        main_model_names=args.far_main_models,
+        fact_model_temperature=args.far_fact_temp,
+        main_model_temperature=args.far_main_temp,
+        max_fact_tokens=args.far_max_fact_tokens,
+        max_main_tokens=args.far_max_main_tokens
+    )
+    far_assessment_llm_config = LLMConfig(temperature=args.far_assess_temp)
+    far_orchestrator_oneshot_llm_config = LLMConfig(temperature=args.far_oneshot_temp)
 
 
     # --- Main Processing Logic ---
@@ -371,7 +419,7 @@ def main():
     elif current_processing_mode == DIRECT_L2T_MODE:
         logging.info("Direct L2TProcessor mode selected.")
         l2t_processor_instance = L2TProcessor(
-            api_key=api_key, # Reverted to api_key
+            api_key=api_key,
             l2t_config=l2t_config,
             initial_thought_llm_config=l2t_model_configs.initial_thought_config,
             node_processor_llm_config=l2t_model_configs.node_thought_generation_config,
@@ -395,7 +443,7 @@ def main():
             hybrid_config=hybrid_config,
             direct_oneshot_model_names=args.hybrid_oneshot_models,
             direct_oneshot_temperature=args.hybrid_oneshot_temp,
-            api_key=api_key, # Reverted to api_key
+            api_key=api_key,
             enable_rate_limiting=args.enable_rate_limiting,
             enable_audit_logging=args.enable_audit_logging
         )
@@ -408,10 +456,10 @@ def main():
             logging.error(f"Direct HybridProcess did not produce a final answer. Error: {error_detail}")
             sys.exit(1)
 
-    elif current_processing_mode == "l2t": # This is the L2T Orchestrator mode
+    elif current_processing_mode == "l2t":
         logging.info("L2TOrchestrator mode selected.")
         l2t_orchestrator = L2TOrchestrator(
-            trigger_mode=L2TTriggerMode.ALWAYS_L2T, # L2T Orchestrator always runs L2T
+            trigger_mode=L2TTriggerMode.ALWAYS_L2T,
             l2t_config=l2t_config,
             model_configs=l2t_model_configs,
             api_key=api_key,
@@ -430,9 +478,8 @@ def main():
             logging.error(f"L2T process (via orchestrator) did not produce a final answer or did not succeed. Error: {error_detail}")
             sys.exit(1)
 
-    elif current_processing_mode.startswith("hybrid-"): # Handle all hybrid orchestrator modes
+    elif current_processing_mode.startswith("hybrid-"):
         try:
-            # Map the explicit mode string to the HybridTriggerMode enum
             if current_processing_mode == "hybrid-always":
                 hybrid_mode_enum_val = HybridTriggerMode.ALWAYS_HYBRID
             elif current_processing_mode == "hybrid-assess-first":
@@ -468,9 +515,8 @@ def main():
             logging.error(f"Hybrid Orchestrator process did not produce a final answer. Error: {error_detail}")
             if hybrid_mode_enum_val != HybridTriggerMode.NEVER_HYBRID: sys.exit(1)
 
-    elif current_processing_mode.startswith("aot-"): # Handle all AoT orchestrator modes
+    elif current_processing_mode.startswith("aot-"):
         try:
-            # Map the explicit mode string to the AotTriggerMode enum
             if current_processing_mode == "aot-always":
                 aot_mode_enum_val = AotTriggerMode.ALWAYS_AOT
             elif current_processing_mode == "aot-assess-first":
@@ -490,7 +536,7 @@ def main():
             aot_config=aot_runner_config,
             direct_oneshot_llm_config=aot_main_llm_config,
             assessment_llm_config=aot_assessment_llm_config,
-            aot_main_llm_config=aot_main_llm_config, # This is for AoTProcess internal to orchestrator
+            aot_main_llm_config=aot_main_llm_config,
             direct_oneshot_model_names=args.aot_main_models, 
             assessment_model_names=args.aot_assess_models,
             use_heuristic_shortcut=not args.aot_disable_heuristic,
@@ -513,19 +559,15 @@ def main():
             model_configs=got_llm_configs
         )
         got_result_data = got_processor_instance.run(problem_text)
-        # Wrap the result for consistency, though direct processor doesn't build full GoTSolution
         solution = GoTSolution(
             got_result=got_result_data,
             final_answer=got_result_data.final_answer,
             total_wall_clock_time_seconds=got_result_data.total_process_wall_clock_time_seconds
         )
-        # For direct mode, summary is simpler, focusing on GoTResult
-        summary_gen = GoTSummaryGenerator(trigger_mode=GoTTriggerMode.ALWAYS_GOT) # Dummy mode for this specific summary
+        summary_gen = GoTSummaryGenerator(trigger_mode=GoTTriggerMode.ALWAYS_GOT)
         overall_summary_str = summary_gen._format_got_result_summary(got_result_data)
-
         print("\nDirect GoTProcessor Execution Summary:")
         print(overall_summary_str if overall_summary_str else "No summary returned.")
-
         succeeded = solution and solution.final_answer and solution.got_result and solution.got_result.succeeded
         if not succeeded:
             error_detail = solution.got_result.error_message if solution and solution.got_result else "Unknown error"
@@ -552,7 +594,7 @@ def main():
             trigger_mode=got_mode_enum_val,
             got_config=got_base_config,
             got_model_configs=got_llm_configs,
-            direct_oneshot_llm_config=got_llm_configs.orchestrator_oneshot_config, # Re-use for orchestrator's direct one-shot
+            direct_oneshot_llm_config=got_llm_configs.orchestrator_oneshot_config,
             direct_oneshot_model_names=args.got_orchestrator_oneshot_models,
             assessment_llm_config=got_assessment_llm_config,
             assessment_model_names=args.got_assess_models,
@@ -562,12 +604,64 @@ def main():
         solution, overall_summary_str = got_orchestrator.solve(problem_text)
         print("\nGoT Orchestrator Summary:")
         print(overall_summary_str)
-        if not (solution and solution.succeeded and solution.final_answer): # Check GoTSolution's succeeded property
+        if not (solution and solution.succeeded and solution.final_answer):
             logging.error("GoT Orchestrator process did not produce a final answer or did not succeed.")
-            if got_mode_enum_val != GoTTriggerMode.NEVER_GOT: # Don't exit for NEVER_GOT if it "fails" (as it might be expected for testing)
+            if got_mode_enum_val != GoTTriggerMode.NEVER_GOT:
+                 sys.exit(1)
+
+    elif current_processing_mode == DIRECT_FAR_MODE:
+        logging.info("Direct FaRProcess mode selected.")
+        far_direct_process = FaRProcess(
+            llm_client=shared_llm_client,
+            far_config=far_base_config,
+            direct_oneshot_llm_config=far_orchestrator_oneshot_llm_config,
+            direct_oneshot_model_names=args.far_oneshot_models
+        )
+        far_direct_process.execute(problem_description=problem_text, model_name="direct_far")
+        solution, overall_summary_str = far_direct_process.get_result()
+        print("\nDirect FaRProcess Execution Summary:")
+        print(overall_summary_str if overall_summary_str else "No summary from FaRProcess.")
+        if not (solution and solution.final_answer):
+            error_detail = "Unknown error"
+            if solution and solution.far_result and solution.far_result.error_message:
+                error_detail = solution.far_result.error_message
+            logging.error(f"Direct FaRProcess did not produce a final answer. Error: {error_detail}")
+            sys.exit(1)
+
+    elif current_processing_mode.startswith("far-"):
+        try:
+            if current_processing_mode == "far-always":
+                far_mode_enum_val = FaRTriggerMode.ALWAYS_FAR
+            elif current_processing_mode == "far-assess-first":
+                far_mode_enum_val = FaRTriggerMode.ASSESS_FIRST_FAR
+            elif current_processing_mode == "far-never":
+                far_mode_enum_val = FaRTriggerMode.NEVER_FAR
+            else:
+                raise ValueError(f"Unknown FaR mode: {current_processing_mode}")
+        except ValueError as e:
+            logging.critical(f"Invalid FaR mode string '{current_processing_mode}' for FaR Orchestrator. Error: {e}. Exiting.")
+            sys.exit(1)
+
+        logging.info(f"FaROrchestrator mode selected: {far_mode_enum_val.value}")
+        far_orchestrator = FaROrchestrator(
+            llm_client=shared_llm_client,
+            trigger_mode=far_mode_enum_val,
+            far_config=far_base_config,
+            direct_oneshot_llm_config=far_orchestrator_oneshot_llm_config,
+            direct_oneshot_model_names=args.far_oneshot_models,
+            assessment_llm_config=far_assessment_llm_config if far_mode_enum_val == FaRTriggerMode.ASSESS_FIRST_FAR else None,
+            assessment_model_names=args.far_assess_models if far_mode_enum_val == FaRTriggerMode.ASSESS_FIRST_FAR else None,
+            use_heuristic_shortcut=not args.far_disable_heuristic,
+            heuristic_detector=heuristic_detector_instance
+        )
+        solution, overall_summary_str = far_orchestrator.solve(problem_text)
+        print("\nFaR Orchestrator Summary:")
+        print(overall_summary_str)
+        if not (solution and solution.final_answer): # Check base Solution's final_answer
+            logging.error("FaR Orchestrator process did not produce a final answer or did not succeed.")
+            if far_mode_enum_val != FaRTriggerMode.NEVER_FAR:
                  sys.exit(1)
     else:
-        # This path should ideally not be reached if argparse choices are comprehensive
         logging.critical(f"Unknown or unhandled processing mode: {current_processing_mode}. Exiting.")
         sys.exit(1)
 
@@ -577,7 +671,6 @@ def main():
         print(solution.final_answer)
         print("="*54 + "\n")
     else:
-        # This specific else branch might be redundant if all paths above sys.exit(1) on failure
         logging.error(f"Process '{current_processing_mode}' concluded without a final answer.")
 
 if __name__ == "__main__":
