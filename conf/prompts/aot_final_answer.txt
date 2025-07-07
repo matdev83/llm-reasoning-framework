@@ -1,6 +1,9 @@
-You have finished all reasoning steps for the following problem:
+You have completed the Answer On Thought process for the following problem:
 Problem: {problem_placeholder}
-So far:
+
+Your reasoning process:
 {so_far_placeholder}
-Now output only the final answer in the format:
-Final answer: <value>
+
+Now provide your final, best answer incorporating all the insights from your reflections and refinements:
+
+Final Answer: <your final answer here>

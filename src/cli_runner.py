@@ -81,7 +81,7 @@ DIRECT_GOT_MODE = "got-direct"
 
 def main():
     parser = argparse.ArgumentParser(
-        description="CLI Runner for Algorithm of Thought (AoT), Learn-to-Think (L2T), and Hybrid reasoning processes.",
+        description="CLI Runner for Answer On Thought (AoT), Learn-to-Think (L2T), and Hybrid reasoning processes.",
         formatter_class=argparse.RawTextHelpFormatter
     )
     problem_group = parser.add_mutually_exclusive_group(required=True)

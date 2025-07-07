@@ -2,7 +2,7 @@
 
 This project provides a flexible and modular framework for orchestrating diverse Large Language Model (LLM) reasoning strategies. It enables the breakdown of complex tasks into manageable steps, manages LLM interactions, and dynamically adapts problem-solving approaches based on complexity and resource constraints.
 
-This framework is designed to support various iterative and adaptive reasoning patterns, including Algorithm of Thoughts (AoT), Learn to Think (L2T), Graph of Thoughts (GoT), and a novel Hybrid approach. AoT is an iterative step-by-step reasoning process that breaks down complex problems into manageable sequential steps, with each step building upon previous ones and maintaining a current answer state. L2T focuses on generating and classifying thoughts to build a reasoning graph. GoT creates a graph-based exploration of thoughts with scoring and refinement capabilities. The Hybrid approach separates reasoning from response generation using specialized models for each stage.
+This framework is designed to support various iterative and adaptive reasoning patterns, including Answer On Thought (AoT), Learn to Think (L2T), Graph of Thoughts (GoT), and a novel Hybrid approach. AoT is an iterative step-by-step reasoning process that breaks down complex problems into manageable sequential steps, with each step building upon previous ones and maintaining a current answer state. L2T focuses on generating and classifying thoughts to build a reasoning graph. GoT creates a graph-based exploration of thoughts with scoring and refinement capabilities. The Hybrid approach separates reasoning from response generation using specialized models for each stage.
 
 ## Key Features & Flows
 
@@ -78,25 +78,25 @@ python -m src.cli_runner --processing-mode got-always --problem "Solve this comp
 python -m src.cli_runner --processing-mode got-direct --problem "Analyze this multi-faceted problem from different angles." --got-thought-gen-models "openai/gpt-4o" --got-scoring-models "openai/gpt-4o-mini"
 ```
 
-### AoT (Algorithm of Thoughts) Reasoning Process
+### AoT (Answer On Thought) Reasoning Process
 
-The AoT (Algorithm of Thoughts) Reasoning Process is an iterative step-by-step reasoning approach that systematically breaks down complex problems into manageable sequential steps. Unlike single-shot approaches, AoT builds reasoning incrementally, with each step contributing to a growing understanding of the problem.
+The AoT (Answer On Thought) Reasoning Process implements the proper answer-first, reflection-based methodology. This approach generates an initial answer to the problem, then iteratively reflects on and refines that answer through structured cycles of self-critique and improvement.
 
 The process leverages:
--   **Incremental Reasoning**: Each step builds upon previous steps, creating a coherent reasoning chain.
--   **Current Answer Tracking**: Maintains a "current answer" state that evolves as reasoning progresses.
--   **Dynamic Resource Management**: Automatically adjusts based on token limits, time constraints, and progress monitoring.
--   **Progress Detection**: Identifies when reasoning has stalled or reached completion.
--   **Adaptive Step Limiting**: Dynamically adjusts the number of remaining steps based on resource consumption.
+-   **Answer-First Approach**: Begins by generating an initial answer to establish a foundation for improvement.
+-   **Structured Reflection**: Systematically critiques the current answer, identifying weaknesses, gaps, and areas for improvement.
+-   **Iterative Refinement**: Refines the answer based on reflection insights, creating progressively better solutions.
+-   **Self-Critique Cycles**: Alternates between reflection and refinement phases to continuously improve answer quality.
+-   **Dynamic Resource Management**: Automatically adjusts based on token limits, time constraints, and iteration limits.
 
 **How it works:**
-The `src.aot.orchestrator.InteractiveAoTOrchestrator` manages the overall flow, while `src.aot.processor.AoTProcessor` implements the core iterative logic. The AoT process operates through:
+The `src.aot.orchestrator.InteractiveAoTOrchestrator` manages the overall flow, while `src.aot.processor.AoTProcessor` implements the core Answer On Thought logic. The AoT process operates through three distinct phases:
 
-1.  **Step-by-Step Reasoning**: Each iteration asks for the next unique reasoning step, avoiding repetition.
-2.  **Current Answer Evolution**: Tracks how the current answer changes with each reasoning step.
-3.  **Resource Monitoring**: Continuously monitors token usage, time consumption, and step count.
-4.  **Progress Assessment**: Detects when the same current answer appears multiple times (indicating stagnation).
-5.  **Final Answer Synthesis**: If no final answer emerges during reasoning, makes an explicit final call to synthesize the solution.
+1.  **Initial Answer Generation**: Generates a first-attempt answer to the problem without extensive reasoning.
+2.  **Reflection Phase**: Critically examines the current answer, identifying potential issues, missing information, or areas for improvement.
+3.  **Refinement Phase**: Creates an improved answer based on the reflection insights, addressing identified weaknesses.
+4.  **Iterative Improvement**: Repeats the reflection-refinement cycle until the answer converges or resource limits are reached.
+5.  **Final Answer Synthesis**: Consolidates the best refined answer or makes an explicit final call to produce the ultimate solution.
 
 **Usage via CLI:**
 ```bash
@@ -104,7 +104,7 @@ The `src.aot.orchestrator.InteractiveAoTOrchestrator` manages the overall flow, 
 python -m src.cli_runner --processing-mode aot-assess-first --problem "Design a distributed system architecture."
 
 # Direct AoT processor
-python -m src.cli_runner --processing-mode aot-direct --problem "Solve this optimization problem step by step." --aot-max-steps 15 --aot-max-time 90
+python -m src.cli_runner --processing-mode aot-direct --problem "Solve this optimization problem through iterative answer refinement." --aot-max-steps 3 --aot-max-time 90
 ```
 
 ### L2T (Learn to Think) Reasoning Process
@@ -294,15 +294,15 @@ Here are the available command-line arguments:
     *   Default: `meta-llama/llama-3.3-8b-instruct:free nousresearch/hermes-2-pro-llama-3-8b:free`
 *   **`--aot-assess-temp`**: Temperature for AoT assessment LLM(s).
     *   Default: `0.1`
-*   **`--aot-max-steps`**: Max AoT reasoning steps.
+*   **`--aot-max-steps`**: Max AoT reflection-refinement iterations.
     *   Default: `12`
 *   **`--aot-max-reasoning-tokens`**: Max completion tokens for AoT reasoning phase.
     *   Default: `None` (no limit)
 *   **`--aot-max-time`**: Overall max time for an AoT run (seconds).
     *   Default: `60` seconds
-*   **`--aot-no-progress-limit`**: Stop AoT if no progress for this many steps.
+*   **`--aot-no-progress-limit`**: Stop AoT if no progress for this many iterations (currently unused in reflection-based approach).
     *   Default: `2`
-*   **`--aot-pass-remaining-steps-pct`**: Percentage (0-100) of original max_steps at which to inform LLM about dynamically remaining steps in AoT.
+*   **`--aot-pass-remaining-steps-pct`**: Percentage (0-100) of original max_steps at which to inform LLM about remaining iterations (currently unused in reflection-based approach).
     *   Default: `None`
 *   **`--aot-disable-heuristic`**: Flag to disable the local heuristic analysis for AoT complexity assessment.
 

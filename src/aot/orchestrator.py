@@ -17,7 +17,12 @@ logger = logging.getLogger(__name__) # Named logger
 # Definition of AoTProcess class starts here
 class AoTProcess(ReasoningProcess):
     """
-    Implements the Algorithm of Thoughts (AoT) reasoning process.
+    Implements the Answer On Thought (AoT) reasoning process.
+    
+    The AoT process follows the proper answer-first methodology: generating an initial 
+    answer, then iteratively reflecting on and refining that answer through structured 
+    cycles of self-critique and improvement.
+    
     This class is responsible for executing the AoT chain, including
     running the AoTProcessor and handling fallbacks to a direct one-shot call if AoT fails.
     """

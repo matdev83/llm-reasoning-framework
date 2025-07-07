@@ -1,0 +1,10 @@
+Now reflect on your previous answer. Consider:
+- What aspects might be incomplete or incorrect?
+- What important details or considerations are missing?
+- Are there any logical gaps or inconsistencies?
+- Could the answer be clearer or more comprehensive?
+
+Format your response as:
+Reflection: <your reflection on the previous answer>
+
+Be specific about what you think could be improved. 

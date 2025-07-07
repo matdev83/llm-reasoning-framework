@@ -1,8 +1,8 @@
-Let's solve the following problem step by step.
-Output ONLY the next unique and necessary reasoning step and the updated current answer.
-Do NOT verify, confirm, summarize, reword, or repeat previously described steps.
-If all reasoning steps are complete, say exactly: 'There are no more unique reasoning steps left.'
-Format each step like this:
-Step N: <description> (Current answer: <value>)
-When you are told to give the final answer ensure you generate FULL answer to the original prompt and output:
-Final answer: <value>
+You will solve this problem using the Answer On Thought (AoT) approach.
+
+First, provide your initial answer to the problem. Don't worry about being perfect - just give your best initial response.
+
+Format your response as:
+Initial Answer: <your initial answer here>
+
+After providing your initial answer, you will then reflect on it and refine it iteratively.

@@ -39,13 +39,13 @@ Modules for managing LLM configurations, including model selection, API keys, an
 * `__init__.py`: Initializes the `llm_config` package.
 * `llm_config.py`: Defines the structure and management of LLM configurations.
 
-### `src/aot/` - Algorithm of Thoughts (AoT) Implementation
+### `src/aot/` - Answer On Thought (AoT) Implementation
 
-Modules specifically designed for the Algorithm of Thoughts reasoning strategy.
+Modules specifically designed for the Answer On Thought reasoning strategy, which implements the proper answer-first, reflection-based methodology.
 
 * `__init__.py`: Initializes the `aot` package.
 * `orchestrator.py`: Orchestrates the overall AoT problem-solving flow, managing the sequence of steps and interactions.
-* `processor.py`: Implements the iterative reasoning steps for AoT, including prompt construction, LLM interaction, and response parsing.
+* `processor.py`: Implements the Answer On Thought process with initial answer generation, reflection, and iterative refinement phases.
 * `constants.py`: Defines constants used within the AoT implementation.
 * `dataclasses.py`: Contains data classes for structuring AoT-specific data.
 * `enums.py`: Defines enumerations relevant to the AoT process.

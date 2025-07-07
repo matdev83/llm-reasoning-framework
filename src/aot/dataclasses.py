@@ -22,6 +22,13 @@ class ParsedLLMOutput:
     ran_out_of_steps_signal: bool = False
     final_answer_text: Optional[str] = None
     is_final_answer_marked_done: bool = False
+    # New fields for proper AoT
+    initial_answer: Optional[str] = None
+    reflection_text: Optional[str] = None
+    refined_answer: Optional[str] = None
+    is_initial_answer_provided: bool = False
+    is_reflection_provided: bool = False
+    is_refined_answer_provided: bool = False
 
 @dataclass
 class AoTRunnerConfig:
@@ -44,6 +51,11 @@ class AoTResult:
     total_process_wall_clock_time_seconds: float = 0.0
     reasoning_completion_tokens: int = 0
     succeeded: bool = False
+    # New fields for proper AoT tracking
+    initial_answer: Optional[str] = None
+    reflections: List[str] = field(default_factory=list)
+    refined_answers: List[str] = field(default_factory=list)
+    iterations_completed: int = 0
 
 @dataclass
 class Solution:
